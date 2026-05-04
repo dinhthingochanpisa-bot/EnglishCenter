@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: english-center-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_HOST_PORT:-3002}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-english_center_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-english_center_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: english-center-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  api:
+    image: ${API_IMAGE:-english-center-api:latest}
+    container_name: english-center-api
+    restart: unless-stopped
+    ports:
+      - "${API_HOST_PORT:-8446}:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-english_center_db}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      JWT_SECRET: ${JWT_SECRET:-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8445}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+      NODE_ENV: production
+      UPLOAD_DIR: ${UPLOAD_DIR:-uploads/branding}
+    volumes:
+      - branding_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    image: ${WEB_IMAGE:-english-center-web:latest}
+    container_name: english-center-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_HOST_PORT:-8445}:3001"
+    environment:
+      API_SERVER_URL: "http://api:3000"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8446}
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
+  branding_data:

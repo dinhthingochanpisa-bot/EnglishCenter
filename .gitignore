@@ -1,0 +1,69 @@
+# Dependencies and build output
+node_modules/
+dist/
+.next/
+.turbo/
+coverage/
+uploads/
+apps/**/uploads/
+*.pid
+*_pid.txt
+
+# Environment and local editor files
+.env
+.env.*
+!.env.example
+!.env.deploy.example
+.vscode/
+.idea/
+.DS_Store
+
+# Runtime logs
+*.log
+log.txt
+*_stdout.log
+*_stderr.log
+apps/**/audit_*_out.log
+apps/**/audit_*_err.log
+apps/**/local_*_out.log
+apps/**/local_*_err.log
+apps/**/api_debug.log
+apps/**/web_debug.log
+
+# Docker image exports and archives
+*.tar
+*.tar.gz
+*.tgz
+
+# Local verification scripts and generated evidence
+*.bat
+verification_output.txt
+check_*.js
+check_*.ts
+diagnose_*.js
+gather_evidence.js
+get_ids.js
+patch_db.js
+runtime_validation.js
+smoke_test*.js
+test_simple.js
+verify_*.js
+
+# Phase/audit/report documents
+PHASE_*.md
+GAP_REGISTER_PHASE_*.md
+TEST_EVIDENCE*.md
+ACCEPTANCE_REPORT.md
+GEMINI_FIX_REQUESTS.md
+implementation_plan.md
+phase*.docx
+phase*.md
+
+# Local business data files
+*.xlsx
+
+# Misc generated migration scratch files
+packages/database/prisma/migrations/*_temp.sql
+
+# Local docs folder
+docs/

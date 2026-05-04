@@ -1,0 +1,1067 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+// --- Dynamic Branding & Configuration ---
+
+model BrandingConfig {
+  id             String   @id @default(uuid())
+  appName        String
+  shortName      String
+  logoLightUrl   String?
+  logoDarkUrl    String?
+  faviconUrl     String?
+  primaryColor   String   @default("#007bff")
+  secondaryColor String   @default("#6c757d")
+  accentColor    String   @default("#28a745")
+  headingFont    String   @default("Inter")
+  bodyFont       String   @default("Inter")
+  borderRadius   String   @default("8px")
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+}
+
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+// --- Feature Toggles / Modules ---
+// Canonical codes: CRM_LEADS, SALES_PIPELINE, FAMILY_PARENT, STUDENT, PROGRAM_PRODUCT, 
+// CLASS_ACADEMIC, CONTRACT, PAYMENT_RECEIVABLE, RENEWAL_RETENTION, REPORTING, NOTIFICATION, AUDIT_LOG, SETTINGS_ADMIN
+
+model ModuleRegistry {
+  id          String          @id @default(uuid())
+  code        String          @unique
+  name        String
+  description String?
+  settings    ModuleSetting[]
+}
+
+model ModuleSetting {
+  id        String         @id @default(uuid())
+  moduleId  String
+  module    ModuleRegistry @relation(fields: [moduleId], references: [id])
+  centerId  String? 
+  center    Center?        @relation(fields: [centerId], references: [id])
+  isEnabled Boolean        @default(true)
+  config    Json? 
+  updatedAt DateTime       @updatedAt
+
+  @@unique([moduleId, centerId])
+}
+
+// --- RBAC & Centers ---
+
+model Role {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  name        String
+  permissions RolePermission[]
+  users       User[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  name        String
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model Center {
+  id             String          @id @default(uuid())
+  name           String
+  code           String          @unique
+  address        String?
+  phone          String?
+  users          UserCenter[]
+  students       Student[]
+  leads          Lead[]
+  contracts      Contract[]
+  classes        Class[]
+  classSchedules ClassSchedule[]
+  moduleSettings ModuleSetting[]
+  appointments   Appointment[]
+  testEvents     TestEvent[]
+  trialEvents    TrialEvent[]
+  auditLogs      AuditLog[]
+  payments       Payment[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model User {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  password        String
+  fullName        String
+  roleId          String
+  role            Role             @relation(fields: [roleId], references: [id])
+  isActive        Boolean          @default(true)
+  centers         UserCenter[]
+  auditLogs       AuditLog[]
+  managedLeads    Lead[]           @relation("LeadOwner")
+  managedContracts Contract[]      @relation("ContractSalesperson")
+  assignedTasks   Task[]           @relation("TaskAssignee")
+  createdInteractions InteractionLog[]
+  ownedCustomerIssues CustomerIssue[] @relation("CustomerIssueOwner")
+  createdCustomerIssues CustomerIssue[] @relation("CustomerIssueCreator")
+  taughtClasses   Class[]          @relation("ClassTeacher")
+  progressNotes   ProgressNote[]
+  createdCareEvents StudentCareEvent[] @relation("StudentCareEventCreator")
+  createdExamEvents StudentExamEvent[] @relation("StudentExamEventCreator")
+  createdWarrantyCases WarrantyCase[] @relation("WarrantyCaseCreator")
+  refreshToken    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model UserCenter {
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+  centerId String
+  center   Center @relation(fields: [centerId], references: [id])
+
+  @@id([userId, centerId])
+}
+
+// --- Family & Students ---
+
+model Family {
+  id          String                  @id @default(uuid())
+  name        String 
+  code        String                  @unique
+  description String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  relations   ParentStudentRelation[]
+  customerIssues CustomerIssue[]
+}
+
+model Parent {
+  id        String                  @id @default(uuid())
+  fullName  String
+  phone     String                  @unique
+  email     String?
+  address   String?
+  preferredCommunicationChannel String? // e.g. ZALO, SMS, EMAIL, PHONE
+  relations ParentStudentRelation[]
+  leads     Lead[]
+  customerIssues CustomerIssue[]
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+}
+
+model Student {
+  id           String                  @id @default(uuid())
+  fullName     String
+  code         String                  @unique
+  birthday     DateTime?
+  gender       Gender                  @default(OTHER)
+  status       StudentStatus           @default(PENDING)
+  centerId     String
+  center       Center                  @relation(fields: [centerId], references: [id])
+  relations    ParentStudentRelation[]
+  contracts    Contract[]
+  enrollments  Enrollment[]
+  classStudent ClassStudent[]
+  attendance      Attendance[]
+  academicResults AcademicResult[]
+  progressNotes   ProgressNote[]
+  careEvents   StudentCareEvent[]
+  examEvents   StudentExamEvent[]
+  warrantyCases WarrantyCase[]
+  customerIssues CustomerIssue[]
+  target       String?
+  outcome      String?
+  warningFlags String?
+  notes        String?
+  externalStudentId String?
+  studentPhone String?
+  school       String?
+  currentGrade String?
+  address      String?
+  fatherName   String?
+  fatherPhone  String?
+  motherName   String?
+  motherPhone  String?
+  aim          String?
+  expectedExamTime String?
+  universityTarget String?
+  examBlock    String?
+  studyAbroad  Boolean?
+  siblingAtPisa Boolean?
+  previousCenter String?
+  officialClassName String?
+  consultantCode String?
+  placementTestDate DateTime?
+  placementListening Decimal? @db.Decimal(5, 2)
+  placementReading Decimal? @db.Decimal(5, 2)
+  placementWriting Decimal? @db.Decimal(5, 2)
+  placementWriting2 Decimal? @db.Decimal(5, 2)
+  placementGrammar Decimal? @db.Decimal(5, 2)
+  placementSpeaking Decimal? @db.Decimal(5, 2)
+  placementOverall Decimal? @db.Decimal(5, 2)
+  scoreReportUrl String?
+  examMonth String?
+  detailedRoadmap String?
+  careHistory String?
+  learningHistory String?
+  paymentHistory String?
+  productName String?
+  productRank String?
+  feePackage String?
+  sourceSheet String?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum StudentStatus {
+  PENDING
+  TRIAL
+  ACTIVE
+  HOLD
+  COMPLETED
+  DROPPED
+  RENEWAL_CANDIDATE
+}
+
+model ParentStudentRelation {
+  id             String  @id @default(uuid())
+  parentId       String
+  parent         Parent  @relation(fields: [parentId], references: [id])
+  studentId      String
+  student        Student @relation(fields: [studentId], references: [id])
+  familyId       String?
+  family         Family? @relation(fields: [familyId], references: [id])
+  relationship   String? 
+  isPrimaryContact Boolean @default(false)
+  isPrimaryPayer   Boolean @default(false)
+
+  @@unique([parentId, studentId])
+}
+
+// --- CRM / Sales Logic ---
+
+model LeadSource {
+  id    String @id @default(uuid())
+  name  String @unique
+  leads Lead[]
+}
+
+model Lead {
+  id           String           @id @default(uuid())
+  parentId     String
+  parent       Parent           @relation(fields: [parentId], references: [id])
+  ownerId      String
+  owner        User             @relation("LeadOwner", fields: [ownerId], references: [id])
+  centerId     String
+  center       Center           @relation(fields: [centerId], references: [id])
+  sourceId     String?
+  source       LeadSource?      @relation(fields: [sourceId], references: [id])
+  status       LeadStatus       @default(NEW)
+  notes        String?
+  opportunities Opportunity[]
+  interactions InteractionLog[]
+  tasks        Task[]
+  appointments Appointment[]
+  testEvents   TestEvent[]
+  trialEvents  TrialEvent[]
+  customerIssues CustomerIssue[]
+  target       String?
+  campaign     String?
+  prospectiveStudentName String?
+  grade        String?
+  school       String?
+  externalOpportunityId String?
+  externalParentId String?
+  externalStudentId String?
+  leadPhone    String?
+  productInterest String?
+  contacted    Boolean?
+  contactedAt  DateTime?
+  qualified    Boolean?
+  demand       String?
+  testAppointmentAt DateTime?
+  checkedIn    Boolean?
+  checkedInAt  DateTime?
+  studentBirthday DateTime?
+  aim          String?
+  expectedExamTime String?
+  fatherName   String?
+  fatherPhone  String?
+  motherName   String?
+  motherPhone  String?
+  studentPhone String?
+  address      String?
+  testDone     Boolean?
+  testDate     DateTime?
+  baseTaskCreated Boolean?
+  headReturnedScore Boolean?
+  scoreListening Decimal? @db.Decimal(5, 2)
+  scoreReading Decimal? @db.Decimal(5, 2)
+  scoreWriting Decimal? @db.Decimal(5, 2)
+  scoreSpeaking Decimal? @db.Decimal(5, 2)
+  scoreOverall Decimal? @db.Decimal(5, 2)
+  scoreReportUrl String?
+  resultReturned Boolean?
+  resultReturnedAt DateTime?
+  closeStatus   String?
+  sourceSheet   String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([externalStudentId])
+  @@index([closeStatus])
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  NURTURING
+  LOST
+  CONVERTED
+}
+
+model Opportunity {
+  id        String            @id @default(uuid())
+  leadId    String
+  lead      Lead              @relation(fields: [leadId], references: [id])
+  programId String?
+  program   Program?           @relation(fields: [programId], references: [id])
+  status    OpportunityStatus @default(OPEN)
+  value     Decimal?          @db.Decimal(12, 2)
+  notes     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  interactions InteractionLog[]
+  tasks        Task[]
+}
+
+enum OpportunityStatus {
+  OPEN
+  CHECKIN_BOOKED
+  CHECKIN_DONE
+  TEST_DONE
+  TRIAL_DONE
+  WON
+  LOST
+}
+
+model CustomerIssue {
+  id          String                 @id @default(uuid())
+  type        CustomerIssueType
+  category    CustomerIssueCategory
+  status      CustomerIssueStatus   @default(OPEN)
+  priority    CustomerIssuePriority @default(MEDIUM)
+  title       String
+  description String?
+  resolution  String?
+  nextAction  String?
+  dueDate     DateTime?
+  resolvedAt  DateTime?
+  centerId    String
+  leadId      String?
+  lead        Lead?                  @relation(fields: [leadId], references: [id])
+  studentId   String?
+  student     Student?               @relation(fields: [studentId], references: [id])
+  parentId    String?
+  parent      Parent?                @relation(fields: [parentId], references: [id])
+  familyId    String?
+  family      Family?                @relation(fields: [familyId], references: [id])
+  ownerId     String
+  owner       User                   @relation("CustomerIssueOwner", fields: [ownerId], references: [id])
+  createdById String
+  createdBy   User                   @relation("CustomerIssueCreator", fields: [createdById], references: [id])
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([centerId])
+  @@index([leadId])
+  @@index([studentId])
+  @@index([parentId])
+  @@index([familyId])
+  @@index([status])
+  @@index([priority])
+  @@index([type])
+}
+
+enum CustomerIssueType {
+  OBJECTION
+  COMPLAINT
+}
+
+enum CustomerIssueCategory {
+  PRICE
+  DISCOUNT
+  PROMOTION
+  PRODUCT_PROGRAM
+  SCHEDULE
+  CLASS_TRANSFER
+  TEACHER_TRANSFER
+  ACADEMIC_QUALITY
+  SERVICE_EXPERIENCE
+  PAYMENT
+  FACILITY
+  OTHER
+}
+
+enum CustomerIssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  ESCALATED
+  CANCELLED
+}
+
+enum CustomerIssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model SalesHandover {
+  id                      String              @id @default(uuid())
+  opportunityId           String              @unique
+  leadId                  String
+  studentId               String?
+  contractId              String?
+  classId                 String?
+  centerId                String
+  ownerId                 String
+  status                  SalesHandoverStatus @default(PENDING)
+  profileConfirmed        Boolean             @default(false)
+  profileNotes            String?
+  paymentGuideSent        Boolean             @default(false)
+  paymentReceiptConfirmed Boolean             @default(false)
+  paymentNotes            String?
+  scheduleRequested       Boolean             @default(false)
+  scheduleConfirmed       Boolean             @default(false)
+  schedulePreference      String?
+  scheduleNotes           String?
+  academicHandoverSent    Boolean             @default(false)
+  academicNotes           String?
+  welcomeSent             Boolean             @default(false)
+  groupsAdded             Boolean             @default(false)
+  zaloGroupCreated        Boolean             @default(false)
+  parentConfirmed         Boolean             @default(false)
+  welcomeNotes            String?
+  completedAt             DateTime?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  @@index([leadId])
+  @@index([centerId])
+  @@index([ownerId])
+}
+
+enum SalesHandoverStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+model InteractionLog {
+  id             String       @id @default(uuid())
+  leadId         String?
+  lead           Lead?        @relation(fields: [leadId], references: [id])
+  opportunityId  String?
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id])
+  actorId        String
+  actor          User         @relation(fields: [actorId], references: [id])
+  type           String       
+  content        String
+  timestamp      DateTime     @default(now())
+}
+
+model Task {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      TaskStatus @default(TODO)
+  priority    String     @default("MEDIUM") 
+  leadId      String?
+  lead        Lead?      @relation(fields: [leadId], references: [id])
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  assigneeId  String
+  assignee    User       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model Appointment {
+  id        String            @id @default(uuid())
+  leadId    String
+  lead      Lead              @relation(fields: [leadId], references: [id])
+  centerId  String
+  center    Center            @relation(fields: [centerId], references: [id])
+  startTime DateTime
+  endTime   DateTime
+  status    AppointmentStatus @default(SCHEDULED)
+  notes     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NOSHOW
+}
+
+model TestEvent {
+  id        String     @id @default(uuid())
+  leadId    String
+  lead      Lead       @relation(fields: [leadId], references: [id])
+  centerId  String
+  center    Center     @relation(fields: [centerId], references: [id])
+  scheduledAt DateTime
+  result    String?
+  notes     String?
+  status    TestEventStatus @default(PENDING)
+}
+
+enum TestEventStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model TrialEvent {
+  id        String     @id @default(uuid())
+  leadId    String
+  lead      Lead       @relation(fields: [leadId], references: [id])
+  centerId  String
+  center    Center     @relation(fields: [centerId], references: [id])
+  scheduledAt DateTime
+  feedback  String?
+  status    TrialEventStatus @default(PENDING)
+}
+
+enum TrialEventStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+// --- Academic Logic ---
+
+model Product {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  programs    Program[]
+  isActive    Boolean   @default(true)
+}
+
+model Program {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  name        String
+  code        String   @unique
+  description String?
+  levels      Level[]
+  plans       Plan[]
+  classes     Class[]
+  opportunities Opportunity[]
+  enrollments Enrollment[]
+}
+
+model Level {
+  id        String  @id @default(uuid())
+  programId String
+  program   Program @relation(fields: [programId], references: [id])
+  name      String
+  order     Int
+}
+
+model Plan {
+  id          String   @id @default(uuid())
+  programId   String
+  program     Program  @relation(fields: [programId], references: [id])
+  name        String
+  price       Decimal  @db.Decimal(12, 2)
+  durationMonths Int
+  sessionCount  Int?
+  contractDetails ContractDetail[]
+}
+
+model Class {
+  id        String         @id @default(uuid())
+  programId String
+  program   Program        @relation(fields: [programId], references: [id])
+  centerId  String
+  center    Center         @relation(fields: [centerId], references: [id])
+  name      String
+  code      String         @unique
+  status    ClassStatus    @default(PLANNING)
+  capacity  Int            @default(20)
+  teacherId String?
+  teacher   User?          @relation("ClassTeacher", fields: [teacherId], references: [id])
+  schedules ClassSchedule[]
+  students  ClassStudent[]
+  enrollments Enrollment[]
+  attendance    Attendance[]
+  academicResults AcademicResult[]
+  progressNotes   ProgressNote[]
+  careEvents   StudentCareEvent[]
+  examEvents   StudentExamEvent[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([id, centerId])
+  @@index([programId])
+  @@index([centerId])
+}
+
+enum ClassStatus {
+  PLANNING
+  ACTIVE
+  FINISHED
+  CANCELLED
+}
+
+model ClassSchedule {
+  id        String   @id @default(uuid())
+  classId   String
+  class     Class    @relation(fields: [classId, centerId], references: [id, centerId])
+  centerId  String
+  center    Center   @relation(fields: [centerId], references: [id])
+  dayOfWeek Int      
+  startTime String   
+  endTime   String   
+  room      String?
+
+  @@index([classId, centerId])
+  @@index([centerId])
+}
+
+model ClassStudent {
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id])
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  joinedAt  DateTime @default(now())
+  status    ClassStudentStatus @default(ACTIVE)
+
+  @@id([classId, studentId])
+}
+
+enum ClassStudentStatus {
+  ACTIVE
+  DROPPED
+  FINISHED
+}
+
+model Enrollment {
+  id        String           @id @default(uuid())
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id])
+  programId String
+  program   Program          @relation(fields: [programId], references: [id])
+  classId   String?
+  class     Class?           @relation(fields: [classId], references: [id])
+  status    EnrollmentStatus @default(ENROLLED)
+  startDate DateTime
+  endDate   DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  ACTIVE
+  SUSPENDED
+  COMPLETED
+}
+
+model Attendance {
+  id        String           @id @default(uuid())
+  classId   String
+  class     Class            @relation(fields: [classId], references: [id])
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id])
+  date      DateTime
+  status    AttendanceStatus @default(PRESENT)
+  notes     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([classId, studentId, date])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model AcademicResult {
+  id        String             @id @default(uuid())
+  studentId String
+  student   Student            @relation(fields: [studentId], references: [id])
+  classId   String?
+  class     Class?             @relation(fields: [classId], references: [id])
+  type      AcademicResultType
+  score     Decimal            @db.Decimal(5, 2)
+  date      DateTime
+  comments  String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+enum AcademicResultType {
+  MOCK
+  MIDTERM
+  FINAL
+}
+
+model ProgressNote {
+  id        String   @id @default(uuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  classId   String?
+  class     Class?   @relation(fields: [classId], references: [id])
+  teacherId String
+  teacher   User     @relation(fields: [teacherId], references: [id])
+  content   String
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudentCareEvent {
+  id          String               @id @default(uuid())
+  studentId   String
+  student     Student              @relation(fields: [studentId], references: [id])
+  classId     String?
+  class       Class?               @relation(fields: [classId], references: [id])
+  createdById String
+  createdBy   User                 @relation("StudentCareEventCreator", fields: [createdById], references: [id])
+  type        StudentCareEventType
+  riskLevel   StudentRiskLevel?
+  title       String
+  content     String?
+  actionPlan  String?
+  dueDate     DateTime?
+  status      StudentCareEventStatus @default(OPEN)
+  occurredAt  DateTime             @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([studentId])
+  @@index([classId])
+  @@index([type])
+  @@index([status])
+  @@index([occurredAt])
+}
+
+enum StudentCareEventType {
+  FIRST_LESSON
+  ATTENDANCE
+  TEACHER_COMMENT
+  RISK_WARNING
+  GENERAL
+}
+
+enum StudentRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum StudentCareEventStatus {
+  OPEN
+  RESOLVED
+}
+
+model StudentExamEvent {
+  id            String             @id @default(uuid())
+  studentId     String
+  student       Student            @relation(fields: [studentId], references: [id])
+  classId       String?
+  class         Class?             @relation(fields: [classId], references: [id])
+  contractId    String?
+  contract      Contract?          @relation(fields: [contractId], references: [id])
+  createdById   String
+  createdBy     User               @relation("StudentExamEventCreator", fields: [createdById], references: [id])
+  type          StudentExamType
+  status        StudentExamStatus  @default(SCHEDULED)
+  scheduledAt   DateTime
+  completedAt   DateTime?
+  score         Decimal?           @db.Decimal(5, 2)
+  targetScore   Decimal?           @db.Decimal(5, 2)
+  outcome       StudentExamOutcome?
+  notes         String?
+  actionPlan    String?
+  registrationStatus ExamRegistrationStatus @default(NOT_STARTED)
+  examFeeConfirmed Boolean            @default(false)
+  documentsChecked Boolean            @default(false)
+  reminderTMinus7Sent Boolean         @default(false)
+  reminderTMinus3Sent Boolean         @default(false)
+  reminderTMinus1Sent Boolean         @default(false)
+  arrivalConfirmed Boolean            @default(false)
+  registrationNotes String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([studentId])
+  @@index([classId])
+  @@index([contractId])
+  @@index([type])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+enum StudentExamType {
+  MOCK_TEST
+  REAL_EXAM
+}
+
+enum StudentExamStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum ExamRegistrationStatus {
+  NOT_STARTED
+  PROPOSED
+  CONFIRMED
+  REGISTERED
+  CANCELLED
+}
+
+enum StudentExamOutcome {
+  BELOW_TARGET
+  MEET_TARGET
+  EXCEED_TARGET
+}
+
+model WarrantyCase {
+  id          String             @id @default(uuid())
+  studentId   String
+  student     Student            @relation(fields: [studentId], references: [id])
+  contractId  String?
+  contract    Contract?          @relation(fields: [contractId], references: [id])
+  examEventId String?
+  createdById String
+  createdBy   User               @relation("WarrantyCaseCreator", fields: [createdById], references: [id])
+  status      WarrantyCaseStatus @default(OPEN)
+  reason      String
+  plan        String?
+  dueDate     DateTime?
+  resolvedAt  DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([studentId])
+  @@index([contractId])
+  @@index([status])
+}
+
+enum WarrantyCaseStatus {
+  OPEN
+  APPROVED
+  COMPLETED
+  CANCELLED
+}
+
+
+
+// --- Commercial / Financial Logic ---
+
+model Contract {
+  id             String         @id @default(uuid())
+  code           String         @unique
+  studentId      String
+  student        Student        @relation(fields: [studentId], references: [id])
+  centerId       String
+  center         Center         @relation(fields: [centerId], references: [id])
+  ownerId        String
+  salesperson    User           @relation("ContractSalesperson", fields: [ownerId], references: [id])
+  listPrice      Decimal        @db.Decimal(12, 2)
+  discountPercent Decimal       @default(0) @db.Decimal(5, 2)
+  discountAmount Decimal        @default(0) @db.Decimal(12, 2)
+  finalAmount    Decimal        @db.Decimal(12, 2)
+  status         ContractStatus @default(DRAFT)
+  startDate      DateTime
+  endDate        DateTime
+  signedAt       DateTime?
+  consultantCode String?
+  contractType   String?
+  productName    String?
+  productRank    String?
+  feePackage     String?
+  contractedSessions Decimal? @db.Decimal(8, 2)
+  paidAmount     Decimal? @db.Decimal(12, 2)
+  debtAmount     Decimal? @db.Decimal(12, 2)
+  debtDueDate    DateTime?
+  totalLearningSessions Decimal? @db.Decimal(8, 2)
+  mentorSessions Decimal? @db.Decimal(8, 2)
+  tutorSessions  Decimal? @db.Decimal(8, 2)
+  mockTeacherSessions Decimal? @db.Decimal(8, 2)
+  mockExpertSessions Decimal? @db.Decimal(8, 2)
+  sourceSheet    String?
+  details        ContractDetail[]
+  paymentSchedule PaymentSchedule[]
+  payments       Payment[]
+  renewalsOld    Renewal[]      @relation("OldContract")
+  renewalsNew    Renewal[]      @relation("NewContract")
+  examEvents     StudentExamEvent[]
+  warrantyCases  WarrantyCase[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  CANCELLED
+}
+
+model ContractDetail {
+  id         String   @id @default(uuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id])
+  planId     String
+  plan       Plan     @relation(fields: [planId], references: [id])
+  quantity   Int      @default(1)
+  unitPrice  Decimal  @db.Decimal(12, 2)
+  discount   Decimal  @default(0) @db.Decimal(12, 2)
+  totalPrice Decimal  @db.Decimal(12, 2)
+}
+
+model PaymentSchedule {
+  id              String   @id @default(uuid())
+  contractId      String
+  contract        Contract @relation(fields: [contractId], references: [id])
+  dueDate         DateTime
+  amount          Decimal  @db.Decimal(12, 2)
+  paidAmount      Decimal  @default(0) @db.Decimal(12, 2)
+  remainingAmount Decimal  @db.Decimal(12, 2)
+  status          PaymentScheduleStatus @default(UNPAID)
+}
+
+enum PaymentScheduleStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
+  WAIVED
+  CANCELLED
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  contractId  String
+  contract    Contract @relation(fields: [contractId], references: [id])
+  centerId    String
+  center      Center   @relation(fields: [centerId], references: [id])
+  amount      Decimal  @db.Decimal(12, 2)
+  method      PaymentMethod @default(TRANSFER)
+  type        PaymentType   @default(TUITION)
+  status      PaymentStatus @default(COMPLETED)
+  paidAt      DateTime @default(now())
+  notes       String?
+  auditLogs   AuditLog[]
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CARD
+}
+
+enum PaymentType {
+  TUITION
+  MATERIAL
+  OTHER
+}
+
+enum PaymentStatus {
+  COMPLETED
+  VOIDED
+  REFUNDED
+}
+
+model Renewal {
+  id             String   @id @default(uuid())
+  oldContractId  String
+  oldContract    Contract @relation("OldContract", fields: [oldContractId], references: [id])
+  newContractId  String?
+  newContract    Contract? @relation("NewContract", fields: [newContractId], references: [id])
+  status         RenewalStatus @default(PENDING)
+  notes          String?
+  createdAt      DateTime @default(now())
+}
+
+enum RenewalStatus {
+  PENDING
+  APPROVED
+  COMPLETED
+  CANCELLED
+}
+
+// --- Auditability ---
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id])
+  entityType String   
+  entityId   String
+  action     String   
+  beforeData Json?
+  afterData  Json?
+  centerId   String?
+  center     Center?  @relation(fields: [centerId], references: [id])
+  timestamp  DateTime @default(now())
+  paymentId  String?  
+  payment    Payment? @relation(fields: [paymentId], references: [id])
+}
