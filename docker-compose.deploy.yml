@@ -4,7 +4,7 @@ services:
     container_name: english-center-postgres
     restart: unless-stopped
     ports:
-      - "${POSTGRES_HOST_PORT:-3002}:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
@@ -21,22 +21,55 @@ services:
     image: redis:7-alpine
     container_name: english-center-redis
     restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
     volumes:
       - redis_data:/data
+
+  api-migrate:
+    image: ${API_IMAGE:-english-center-api:latest}
+    container_name: english-center-api-migrate
+    command: ["npm", "run", "migrate:deploy", "--workspace=database"]
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-english_center_db}?schema=public"
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  db-seed:
+    image: postgres:16-alpine
+    container_name: english-center-db-seed
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-english_center_db}
+      DATA_DUMP_FILE: /docker-entrypoint-initdata/local-data-dump.sql
+    volumes:
+      - ./local-data-dump.sql:/docker-entrypoint-initdata/local-data-dump.sql:ro
+      - ./docker/postgres/import-local-data.sh:/docker-entrypoint-initdata/import-local-data.sh:ro
+    command: ["sh", "/docker-entrypoint-initdata/import-local-data.sh"]
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+    restart: "no"
 
   api:
     image: ${API_IMAGE:-english-center-api:latest}
     container_name: english-center-api
     restart: unless-stopped
     ports:
-      - "${API_HOST_PORT:-8446}:3000"
+      - "${API_HOST_PORT:-3100}:3000"
     environment:
       PORT: 3000
       DATABASE_URL: "postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-english_center_db}?schema=public"
       REDIS_URL: "redis://redis:6379"
       JWT_SECRET: ${JWT_SECRET:-change-me}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8445}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3002}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
       NODE_ENV: production
@@ -44,8 +77,8 @@ services:
     volumes:
       - branding_data:/app/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-seed:
+        condition: service_completed_successfully
       redis:
         condition: service_started
 
@@ -54,10 +87,10 @@ services:
     container_name: english-center-web
     restart: unless-stopped
     ports:
-      - "${WEB_HOST_PORT:-8445}:3001"
+      - "${WEB_HOST_PORT:-3002}:3001"
     environment:
       API_SERVER_URL: "http://api:3000"
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8446}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3100}
     depends_on:
       - api
 
