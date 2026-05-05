@@ -12,6 +12,7 @@ import {
   ContractDetail,
   Prisma,
   SalesHandoverStatus,
+  AcademicResultType,
 } from '@prisma/client';
 import { CenterScope } from '../common/utils/center-scope.utils';
 import { PhoneUtility } from '../common/utils/phone.utils';
@@ -27,11 +28,34 @@ export class OpportunityService {
   async quoteContract(payload: any) {
     return this.contractService.quote({
       listPrice: Number(payload.listPrice ?? payload.amount ?? 0),
+      discountPercent: payload.discountPercent,
+      discountAmount: payload.discountAmount,
       discountSegmentCode: payload.discountSegmentCode,
       promotionCodes: payload.promotionCodes || [],
       contractedSessions: payload.contractedSessions
         ? Number(payload.contractedSessions)
         : undefined,
+    });
+  }
+
+  async findClassesForOpportunity(id: string, user: any) {
+    const opp = await this.prisma.opportunity.findUnique({
+      where: { id },
+      include: { lead: true },
+    });
+
+    if (!opp) throw new NotFoundException('Opportunity not found');
+    CenterScope.validate(user, opp.lead.centerId);
+
+    return this.prisma.class.findMany({
+      where: { centerId: opp.lead.centerId },
+      include: {
+        program: true,
+        center: { select: { id: true, name: true, code: true } },
+        teacher: { select: { id: true, fullName: true } },
+        _count: { select: { students: true } },
+      },
+      orderBy: { code: 'asc' },
     });
   }
 
@@ -271,9 +295,10 @@ export class OpportunityService {
             },
           });
 
-      await tx.opportunity.update({
+      const updatedOpp = await tx.opportunity.update({
         where: { id },
         data: {
+          status: OpportunityStatus.TRIAL_DONE,
           notes: [opp.notes, `Kết quả kiểm tra: ${result}`, notes ? `Nhận xét: ${notes}` : null]
             .filter(Boolean)
             .join('\n'),
@@ -286,10 +311,27 @@ export class OpportunityService {
           entityType: 'OPPORTUNITY',
           entityId: id,
           action: 'SAVE_TEST_RESULT',
-          afterData: testEvent as any,
+          afterData: { testEvent, status: updatedOpp.status } as any,
           centerId: opp.lead.centerId,
         },
       });
+
+      const placementScore = this.parsePlacementScore(result);
+      await tx.lead.update({
+        where: { id: opp.leadId },
+        data: {
+          testDone: true,
+          testDate: testEvent.scheduledAt,
+          resultReturned: true,
+          resultReturnedAt: new Date(),
+          scoreOverall: placementScore == null ? undefined : new Prisma.Decimal(placementScore),
+        },
+      });
+
+      const student = await this.findStudentForOpportunity(tx, opp);
+      if (student) {
+        await this.syncPlacementResultFromTestEvent(tx, student.id, testEvent);
+      }
 
       return testEvent;
     });
@@ -309,6 +351,7 @@ export class OpportunityService {
       }
 
       const student = await this.ensureStudentFromOpportunity(tx, opp, payload.student || {}, StudentStatus.TRIAL);
+      await this.syncLatestPlacementResult(tx, opp.leadId, student.id);
       await this.assignStudentToClass(tx, student.id, payload.classId, opp.lead.centerId, 'ENROLLED');
 
       await tx.auditLog.create({
@@ -584,6 +627,86 @@ export class OpportunityService {
     });
   }
 
+  private async findStudentForOpportunity(tx: any, opp: any) {
+    const studentName =
+      opp.lead.prospectiveStudentName?.trim() ||
+      opp.lead.parent?.fullName?.trim();
+
+    if (!opp.lead.parentId || !studentName) return null;
+
+    const relation = await tx.parentStudentRelation.findFirst({
+      where: {
+        parentId: opp.lead.parentId,
+        student: {
+          centerId: opp.lead.centerId,
+          fullName: { equals: studentName, mode: 'insensitive' },
+        },
+      },
+      include: { student: true },
+    });
+
+    return relation?.student || null;
+  }
+
+  private parsePlacementScore(result: string | null | undefined) {
+    const normalized = result?.toString().replace(',', '.').trim();
+    if (!normalized) return null;
+
+    const matched = normalized.match(/\d+(?:\.\d+)?/);
+    if (!matched) return null;
+
+    const score = Number(matched[0]);
+    return Number.isFinite(score) ? score : null;
+  }
+
+  private async syncLatestPlacementResult(tx: any, leadId: string, studentId: string) {
+    const latestTestEvent = await tx.testEvent.findFirst({
+      where: { leadId, status: 'COMPLETED', result: { not: null } },
+      orderBy: { scheduledAt: 'desc' },
+    });
+
+    if (!latestTestEvent) return null;
+    return this.syncPlacementResultFromTestEvent(tx, studentId, latestTestEvent);
+  }
+
+  private async syncPlacementResultFromTestEvent(tx: any, studentId: string, testEvent: any) {
+    const score = this.parsePlacementScore(testEvent.result);
+    if (score == null) return null;
+
+    const comments = [
+      `Ket qua test dau vao: ${testEvent.result}`,
+      testEvent.notes ? `Nhan xet: ${testEvent.notes}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const existingResult = await tx.academicResult.findFirst({
+      where: { studentId, type: AcademicResultType.PLACEMENT },
+      orderBy: { date: 'desc' },
+    });
+
+    const data = {
+      score: new Prisma.Decimal(score),
+      date: testEvent.scheduledAt || new Date(),
+      comments,
+    };
+
+    if (existingResult) {
+      return tx.academicResult.update({
+        where: { id: existingResult.id },
+        data,
+      });
+    }
+
+    return tx.academicResult.create({
+      data: {
+        studentId,
+        type: AcademicResultType.PLACEMENT,
+        ...data,
+      },
+    });
+  }
+
   private async assignStudentToClass(
     tx: any,
     studentId: string,
@@ -656,7 +779,8 @@ export class OpportunityService {
         throw new ConflictException('Opportunity already WON');
 
       CenterScope.validate(user, opp.lead.centerId);
-      if (!payload.classId) {
+      const waitForClass = Boolean(payload.waitForClass || !payload.classId);
+      if (!payload.classId && !waitForClass) {
         throw new BadRequestException('Vui lòng chọn lớp trước khi chốt thành công');
       }
 
@@ -676,6 +800,8 @@ export class OpportunityService {
       const quote = useConfigPricing
         ? await this.contractService.quote({
             listPrice,
+            discountPercent: payload.discountPercent,
+            discountAmount: payload.discountAmount,
             discountSegmentCode: payload.discountSegmentCode,
             promotionCodes: payload.promotionCodes || [],
             contractedSessions: payload.contractedSessions
@@ -709,18 +835,21 @@ export class OpportunityService {
         tx,
         opp,
         { fullName: payload.studentName },
-        StudentStatus.ACTIVE,
+        waitForClass ? StudentStatus.PENDING : StudentStatus.ACTIVE,
       );
-      const cls = await this.assignStudentToClass(
-        tx,
-        student.id,
-        payload.classId,
-        opp.lead.centerId,
-        'ACTIVE',
-      );
+      await this.syncLatestPlacementResult(tx, opp.leadId, student.id);
+      const cls = waitForClass
+        ? null
+        : await this.assignStudentToClass(
+            tx,
+            student.id,
+            payload.classId,
+            opp.lead.centerId,
+            'ACTIVE',
+          );
 
       // --- 2. Create Contract ---
-      const contractCode = `HD${Date.now().toString().slice(-6)}`;
+      const contractCode = await this.contractService.generateContractCode(opp.lead.centerId, tx);
       const contract = await tx.contract.create({
         data: {
           code: contractCode,
@@ -773,6 +902,10 @@ export class OpportunityService {
           notes: payload.notes,
         },
       });
+      await tx.lead.update({
+        where: { id: opp.leadId },
+        data: { status: 'CONVERTED' },
+      });
 
       const handover = await tx.salesHandover.upsert({
         where: { opportunityId: id },
@@ -781,24 +914,28 @@ export class OpportunityService {
           leadId: opp.leadId,
           studentId: student.id,
           contractId: contract.id,
-          classId: cls.id,
+          classId: cls?.id || null,
           centerId: opp.lead.centerId,
           ownerId: opp.lead.ownerId,
           profileConfirmed: true,
-          scheduleConfirmed: true,
+          scheduleConfirmed: Boolean(cls),
           status: SalesHandoverStatus.IN_PROGRESS,
           profileNotes: 'Tự động xác nhận hồ sơ khi chốt thành công.',
-          scheduleNotes: `Đã xếp lớp chính thức: ${cls.code} - ${cls.name}`,
+          scheduleNotes: cls
+            ? `Đã xếp lớp chính thức: ${cls.code} - ${cls.name}`
+            : 'Chờ xếp lớp chính thức.',
         },
         update: {
           studentId: student.id,
           contractId: contract.id,
-          classId: cls.id,
+          classId: cls?.id || null,
           profileConfirmed: true,
-          scheduleConfirmed: true,
+          scheduleConfirmed: Boolean(cls),
           status: SalesHandoverStatus.IN_PROGRESS,
           profileNotes: 'Tự động xác nhận hồ sơ khi chốt thành công.',
-          scheduleNotes: `Đã xếp lớp chính thức: ${cls.code} - ${cls.name}`,
+          scheduleNotes: cls
+            ? `Đã xếp lớp chính thức: ${cls.code} - ${cls.name}`
+            : 'Chờ xếp lớp chính thức.',
         },
       });
 
@@ -812,14 +949,14 @@ export class OpportunityService {
           afterData: {
             studentId: student.id,
             contractId: contract.id,
-            classId: cls.id,
+            classId: cls?.id || null,
             handoverId: handover.id,
           },
           centerId: opp.lead.centerId,
         },
       });
 
-      return { opportunity: updatedOpp, student, contract, class: cls };
+      return { opportunity: updatedOpp, student, contract, class: cls, waitForClass };
     });
   }
 }

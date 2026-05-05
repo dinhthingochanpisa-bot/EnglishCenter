@@ -58,6 +58,12 @@ export class LeadController {
     return this.leadService.createLead(body, req.user);
   }
 
+  @Patch(':id')
+  @Permissions('CRM_LEADS.UPDATE')
+  async update(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.leadService.update(id, body, req.user);
+  }
+
   @Post(':id/convert')
   @Permissions('CRM_LEADS.CONVERT')
   async convert(

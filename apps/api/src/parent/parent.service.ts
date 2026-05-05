@@ -92,11 +92,26 @@ export class ParentService {
 
   async update(id: string, data: any, user: any) {
     // ensure access first
-    await this.findOne(id, user);
+    const before = await this.findOne(id, user);
 
-    return this.prisma.parent.update({
+    const updated = await this.prisma.parent.update({
       where: { id },
       data,
     });
+
+    const centerId = before.relations?.[0]?.student?.centerId || null;
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: user.id || user.userId,
+        entityType: 'Parent',
+        entityId: id,
+        action: 'UPDATE_INFO',
+        beforeData: before as any,
+        afterData: updated as any,
+        centerId,
+      },
+    });
+
+    return updated;
   }
 }

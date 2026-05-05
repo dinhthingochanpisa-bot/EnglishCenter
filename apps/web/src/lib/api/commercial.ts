@@ -24,6 +24,7 @@ export const PaymentsClient = {
     body: JSON.stringify(data),
   }),
   getReceivables: () => apiFetch('/commercial/payments/receivables'),
+  getContracts: () => apiFetch('/commercial/payments/contracts'),
   getFamilyReceivables: (familyId: string) => apiFetch(`/commercial/payments/receivables/family/${familyId}`),
 };
 

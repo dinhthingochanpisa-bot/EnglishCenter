@@ -36,6 +36,13 @@ export class PaymentController {
     return this.paymentService.create(data, req.user.userId, req.user);
   }
 
+  @Get('contracts')
+  @Permissions('PAYMENT_RECEIVABLE.VIEW')
+  async getContracts(@Request() req: any) {
+    const where = CenterScope.filter(req.user);
+    return this.paymentService.getContracts(where);
+  }
+
   @Get('receivables')
   @Permissions('PAYMENT_RECEIVABLE.VIEW')
   async getReceivables(@Request() req: any) {

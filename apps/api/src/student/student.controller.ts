@@ -130,6 +130,96 @@ export class StudentController {
     return student;
   }
 
+  @Patch(':id')
+  @Permissions('STUDENT.UPDATE')
+  async update(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const existing = await this.prisma.student.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Student not found');
+    CenterScope.validate(req.user, existing.centerId);
+
+    const updated = await this.prisma.student.update({
+      where: { id },
+      data: {
+        fullName: body.fullName !== undefined ? String(body.fullName).trim() : undefined,
+        birthday: body.birthday ? new Date(body.birthday) : body.birthday === '' ? null : undefined,
+        gender: body.gender || undefined,
+        status: body.status || undefined,
+        target: body.target !== undefined ? body.target?.trim() || null : undefined,
+        studentPhone: body.studentPhone !== undefined ? body.studentPhone?.trim() || null : undefined,
+        school: body.school !== undefined ? body.school?.trim() || null : undefined,
+        currentGrade: body.currentGrade !== undefined ? body.currentGrade?.trim() || null : undefined,
+        address: body.address !== undefined ? body.address?.trim() || null : undefined,
+        aim: body.aim !== undefined ? body.aim?.trim() || null : undefined,
+        notes: body.notes !== undefined ? body.notes?.trim() || null : undefined,
+      },
+    });
+
+    const parentPayload = body.primaryParent || null;
+    if (parentPayload && (parentPayload.fullName || parentPayload.phone || parentPayload.email || parentPayload.relationship)) {
+      const relation = await this.prisma.parentStudentRelation.findFirst({
+        where: { studentId: id },
+        include: { parent: true },
+        orderBy: [{ isPrimaryContact: 'desc' }],
+      });
+
+      if (relation) {
+        await this.prisma.parent.update({
+          where: { id: relation.parentId },
+          data: {
+            fullName: parentPayload.fullName?.trim() || relation.parent.fullName,
+            phone: parentPayload.phone?.trim() || relation.parent.phone,
+            email: parentPayload.email !== undefined ? parentPayload.email?.trim() || null : undefined,
+            address: parentPayload.address !== undefined ? parentPayload.address?.trim() || null : undefined,
+          },
+        });
+        await this.prisma.parentStudentRelation.update({
+          where: { id: relation.id },
+          data: {
+            relationship: parentPayload.relationship?.trim() || relation.relationship,
+            isPrimaryContact: true,
+          },
+        });
+      } else if (parentPayload.fullName && parentPayload.phone) {
+        const parent = await this.prisma.parent.upsert({
+          where: { phone: parentPayload.phone.trim() },
+          update: {
+            fullName: parentPayload.fullName.trim(),
+            email: parentPayload.email?.trim() || null,
+            address: parentPayload.address?.trim() || null,
+          },
+          create: {
+            fullName: parentPayload.fullName.trim(),
+            phone: parentPayload.phone.trim(),
+            email: parentPayload.email?.trim() || null,
+            address: parentPayload.address?.trim() || null,
+          },
+        });
+        await this.prisma.parentStudentRelation.create({
+          data: {
+            parentId: parent.id,
+            studentId: id,
+            relationship: parentPayload.relationship?.trim() || 'Phụ huynh',
+            isPrimaryContact: true,
+          },
+        });
+      }
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: req.user.id || req.user.userId,
+        entityType: 'STUDENT',
+        entityId: updated.id,
+        action: 'UPDATE',
+        beforeData: existing as any,
+        afterData: updated as any,
+        centerId: updated.centerId,
+      },
+    });
+
+    return updated;
+  }
+
   @Get(':id/care-timeline')
   @Permissions('STUDENT.VIEW')
   async getCareTimeline(@Param('id') id: string, @Request() req: any) {
@@ -639,8 +729,10 @@ export class StudentController {
 
     await this.validateStudentClassAndContract(id, student.centerId, body.classId, body.contractId);
 
-    const completed = Boolean(body.markCompleted || body.score !== undefined);
-    const outcome = this.calculateExamOutcome(body.score, body.targetScore);
+    const score = this.validateExamScoreStep(body.score, 'score');
+    const targetScore = this.validateExamScoreStep(body.targetScore, 'targetScore');
+    const completed = Boolean(body.markCompleted || score !== undefined);
+    const outcome = this.calculateExamOutcome(score, targetScore);
 
     const event = await this.prisma.studentExamEvent.create({
       data: {
@@ -652,8 +744,8 @@ export class StudentController {
         scheduledAt: new Date(body.scheduledAt),
         status: completed ? StudentExamStatus.COMPLETED : StudentExamStatus.SCHEDULED,
         completedAt: completed ? new Date() : null,
-        score: body.score ?? null,
-        targetScore: body.targetScore ?? null,
+        score: score ?? null,
+        targetScore: targetScore ?? null,
         outcome,
         notes: body.notes?.trim() || null,
         actionPlan: body.actionPlan?.trim() || null,
@@ -673,13 +765,13 @@ export class StudentController {
       },
     });
 
-    if (completed && body.score !== undefined) {
+    if (completed && score !== undefined) {
       await this.prisma.academicResult.create({
         data: {
           studentId: id,
           classId: body.classId || null,
           type: body.type === StudentExamType.MOCK_TEST ? AcademicResultType.MOCK : AcademicResultType.FINAL,
-          score: body.score,
+          score,
           date: new Date(),
           comments: body.notes?.trim() || null,
         },
@@ -730,8 +822,10 @@ export class StudentController {
     if (!existing || existing.studentId !== id) throw new NotFoundException('Exam event not found');
     CenterScope.validate(req.user, existing.student.centerId);
 
-    const score = body.score ?? (existing.score === null ? undefined : Number(existing.score));
-    const targetScore = body.targetScore ?? (existing.targetScore === null ? undefined : Number(existing.targetScore));
+    const nextScore = this.validateExamScoreStep(body.score, 'score');
+    const nextTargetScore = this.validateExamScoreStep(body.targetScore, 'targetScore');
+    const score = nextScore ?? (existing.score === null ? undefined : Number(existing.score));
+    const targetScore = nextTargetScore ?? (existing.targetScore === null ? undefined : Number(existing.targetScore));
     const status = body.status || existing.status;
     const completed = status === StudentExamStatus.COMPLETED;
     if (
@@ -744,8 +838,8 @@ export class StudentController {
       where: { id: eventId },
       data: {
         status,
-        score: body.score ?? undefined,
-        targetScore: body.targetScore ?? undefined,
+        score: nextScore ?? undefined,
+        targetScore: nextTargetScore ?? undefined,
         outcome: this.calculateExamOutcome(score, targetScore),
         notes: body.notes !== undefined ? body.notes?.trim() || null : undefined,
         actionPlan: body.actionPlan !== undefined ? body.actionPlan?.trim() || null : undefined,
@@ -1090,6 +1184,20 @@ export class StudentController {
     if (score < targetScore) return StudentExamOutcome.BELOW_TARGET;
     if (score === targetScore) return StudentExamOutcome.MEET_TARGET;
     return StudentExamOutcome.EXCEED_TARGET;
+  }
+
+  private validateExamScoreStep(value: number | undefined, fieldName: string): number | undefined {
+    if (value === undefined || value === null) return undefined;
+
+    const parsedValue = Number(value);
+    if (
+      !Number.isFinite(parsedValue) ||
+      Math.abs(parsedValue * 2 - Math.round(parsedValue * 2)) >= 1e-9
+    ) {
+      throw new BadRequestException(`${fieldName} must use 0.5 increments`);
+    }
+
+    return parsedValue;
   }
 
   private getAttendanceLabel(status: AttendanceStatus) {

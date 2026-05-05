@@ -14,14 +14,26 @@ import {
   ChevronLeft,
   CircleUser,
   GraduationCap,
-  History
+  History,
+  Pencil,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 import { ModuleBoundary } from '@/components/common/ModuleBoundary';
+import { AuditTrail } from '@/components/common/AuditTrail';
 
 export default function ParentProfileClient({ id }: { id: string }) {
   const [parent, setParent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    fullName: '',
+    phone: '',
+    email: '',
+    address: '',
+    preferredCommunicationChannel: '',
+  });
 
   const fetchParent = async () => {
     setLoading(true);
@@ -39,6 +51,32 @@ export default function ParentProfileClient({ id }: { id: string }) {
     fetchParent();
   }, [id]);
 
+  const openEditModal = () => {
+    setEditForm({
+      fullName: parent.fullName || '',
+      phone: parent.phone || '',
+      email: parent.email || '',
+      address: parent.address || '',
+      preferredCommunicationChannel: parent.preferredCommunicationChannel || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateParent = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      await apiFetch(`/parents/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(editForm),
+      });
+      setShowEditModal(false);
+      await fetchParent();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (loading) return <div className="p-8 animate-pulse text-slate-400">Đang tải hồ sơ phụ huynh...</div>;
   if (!parent) return <div className="p-8 text-center text-slate-500">Không tìm thấy phụ huynh.</div>;
 
@@ -50,6 +88,12 @@ export default function ParentProfileClient({ id }: { id: string }) {
             <ChevronLeft size={20} /> Quay lại
           </Button>
           <h1 className="text-2xl font-bold text-slate-900">Hồ sơ phụ huynh</h1>
+        </div>
+
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" className="gap-2" onClick={openEditModal}>
+            <Pencil size={16} /> Chinh sua
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -126,9 +170,45 @@ export default function ParentProfileClient({ id }: { id: string }) {
                 Chưa có nhật ký hoạt động cho hồ sơ này.
               </div>
             </Card>
+            <AuditTrail entityType="Parent" entityId={id} />
           </div>
         </div>
+        {showEditModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+            <form onSubmit={handleUpdateParent} className="w-full max-w-xl rounded-xl bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                <h3 className="font-semibold text-slate-900">Chinh sua thong tin phu huynh</h3>
+                <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-700">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                <ParentEditField label="Ho ten" value={editForm.fullName} onChange={(value) => setEditForm((form) => ({ ...form, fullName: value }))} required />
+                <ParentEditField label="SDT" value={editForm.phone} onChange={(value) => setEditForm((form) => ({ ...form, phone: value }))} required />
+                <ParentEditField label="Email" value={editForm.email} onChange={(value) => setEditForm((form) => ({ ...form, email: value }))} />
+                <ParentEditField label="Kenh lien he" value={editForm.preferredCommunicationChannel} onChange={(value) => setEditForm((form) => ({ ...form, preferredCommunicationChannel: value }))} />
+                <label className="text-sm text-slate-500 md:col-span-2">
+                  Dia chi
+                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={editForm.address} onChange={(event) => setEditForm((form) => ({ ...form, address: event.target.value }))} />
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+                <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Huy</Button>
+                <Button type="submit" disabled={isSaving}>{isSaving ? 'Dang luu...' : 'Luu thong tin'}</Button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </ModuleBoundary>
+  );
+}
+
+function ParentEditField({ label, value, onChange, required }: { label: string; value: string; onChange: (value: string) => void; required?: boolean }) {
+  return (
+    <label className="text-sm text-slate-500">
+      {label}
+      <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={value} onChange={(event) => onChange(event.target.value)} required={required} />
+    </label>
   );
 }

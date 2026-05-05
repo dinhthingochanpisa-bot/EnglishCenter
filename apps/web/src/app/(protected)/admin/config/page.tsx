@@ -26,7 +26,7 @@ import { ModuleBoundary } from '@/components/common/ModuleBoundary';
 import { apiFetch } from '@/lib/api';
 import { useAppDialog } from '@/providers/AppDialogProvider';
 
-type TabKey = 'roles' | 'shifts' | 'leadSources' | 'studentStatuses' | 'catalog' | 'pricing' | 'discountSegments' | 'promotions';
+type TabKey = 'roles' | 'shifts' | 'leadSources' | 'studentStatuses' | 'catalog' | 'pricing' | 'discountSegments' | 'promotions' | 'contractCode';
 
 const tabs: Array<{ key: TabKey; label: string; icon: React.ElementType }> = [
   { key: 'roles', label: 'Vai trò', icon: Shield },
@@ -37,6 +37,7 @@ const tabs: Array<{ key: TabKey; label: string; icon: React.ElementType }> = [
   { key: 'pricing', label: 'Gói phí & đơn giá', icon: Tag },
   { key: 'discountSegments', label: 'Phân khúc CK', icon: Tag },
   { key: 'promotions', label: 'Khuyến mãi', icon: Megaphone },
+  { key: 'contractCode', label: 'Ma hop dong', icon: Settings2 },
 ];
 
 const emptyRoleForm = { code: '', name: '', permissionIds: [] as string[] };
@@ -57,6 +58,11 @@ export default function BusinessConfigPage() {
   const [pricing, setPricing] = useState<any[]>([]);
   const [discountSegments, setDiscountSegments] = useState<any[]>([]);
   const [promotions, setPromotions] = useState<any[]>([]);
+  const [contractCode, setContractCode] = useState({
+    template: '{seq}/{year}/HDDV-PISA/{centerCode}',
+    startNumber: '1',
+    padding: '0',
+  });
 
   const [sourceName, setSourceName] = useState('');
   const [editingSource, setEditingSource] = useState<any>(null);
@@ -86,6 +92,11 @@ export default function BusinessConfigPage() {
     setPricing(config.pricingMatrix || []);
     setDiscountSegments(config.discountSegments || []);
     setPromotions(config.promotions || []);
+    setContractCode({
+      template: config.contractCode?.template || '{seq}/{year}/HDDV-PISA/{centerCode}',
+      startNumber: String(config.contractCode?.startNumber ?? 1),
+      padding: String(config.contractCode?.padding ?? 0),
+    });
   };
 
   const fetchData = async () => {
@@ -574,6 +585,47 @@ export default function BusinessConfigPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </Card>
+        )}
+
+        {activeTab === 'contractCode' && (
+          <Card className="p-6">
+            <ConfigHeader
+              title="Cau hinh ma hop dong"
+              description="Dung bien {seq}, {year}, {month}, {day}, {centerCode}. Vi du: {seq}/{year}/HDDV-PISA/{centerCode}."
+              onSave={() => saveConfigSection('contract-code', {
+                template: contractCode.template,
+                startNumber: Number(contractCode.startNumber || 1),
+                padding: Number(contractCode.padding || 0),
+              }, 'Da luu cau hinh ma hop dong')}
+              isSaving={isSaving}
+            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <label className="space-y-1.5 md:col-span-3">
+                <span className="text-xs font-bold uppercase text-slate-500">Mau ma hop dong</span>
+                <Input value={contractCode.template} onChange={(event) => setContractCode((current) => ({ ...current, template: event.target.value }))} />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold uppercase text-slate-500">So bat dau</span>
+                <Input type="number" min="1" value={contractCode.startNumber} onChange={(event) => setContractCode((current) => ({ ...current, startNumber: event.target.value }))} />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold uppercase text-slate-500">Do dai so thu tu</span>
+                <Input type="number" min="0" value={contractCode.padding} onChange={(event) => setContractCode((current) => ({ ...current, padding: event.target.value }))} />
+              </label>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                <p className="text-xs font-bold uppercase text-slate-500">Xem truoc</p>
+                <p className="mt-2 font-mono text-base font-bold text-slate-900">
+                  {contractCode.template
+                    .replaceAll('{seq}', String(Number(contractCode.startNumber || 1)).padStart(Number(contractCode.padding || 0), '0'))
+                    .replaceAll('{year}', String(new Date().getFullYear()))
+                    .replaceAll('{month}', String(new Date().getMonth() + 1).padStart(2, '0'))
+                    .replaceAll('{day}', String(new Date().getDate()).padStart(2, '0'))
+                    .replaceAll('{centerCode}', 'UB')
+                    .replaceAll('{center}', 'UB')}
+                </p>
+              </div>
             </div>
           </Card>
         )}

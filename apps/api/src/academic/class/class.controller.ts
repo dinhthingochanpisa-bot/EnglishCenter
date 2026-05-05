@@ -77,16 +77,38 @@ export class ClassController {
   @Permissions('CLASS_ACADEMIC.CREATE')
   async create(@Body() data: any, @Request() req: any) {
     CenterScope.validate(req.user, data.centerId);
-    
+
+    if (!data.programId) throw new BadRequestException('Program is required');
+    if (!data.centerId) throw new BadRequestException('Center is required');
+    if (!data.name?.trim()) throw new BadRequestException('Class name is required');
+
     // Auto-generate code if missing
     if (!data.code) {
        data.code = `CLS-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
     }
 
+    const schedules = Array.isArray(data.schedules)
+      ? data.schedules
+          .filter((item: any) => item.dayOfWeek && item.startTime && item.endTime)
+          .map((item: any) => ({
+            centerId: data.centerId,
+            dayOfWeek: Number(item.dayOfWeek),
+            startTime: item.startTime,
+            endTime: item.endTime,
+            room: item.room || null,
+          }))
+      : [];
+
     return this.prisma.class.create({
       data: {
-        ...data,
-        schedules: data.schedules ? { create: data.schedules } : undefined,
+        programId: data.programId,
+        centerId: data.centerId,
+        name: data.name.trim(),
+        code: data.code.trim(),
+        status: data.status || 'PLANNING',
+        capacity: Number(data.capacity || 20),
+        teacherId: data.teacherId || null,
+        schedules: schedules.length ? { create: schedules } : undefined,
       },
     });
   }
@@ -101,12 +123,52 @@ export class ClassController {
     return this.prisma.class.update({
       where: { id },
       data: {
-        ...data,
+        name: data.name,
+        code: data.code,
+        status: data.status,
+        capacity: data.capacity !== undefined ? Number(data.capacity) : undefined,
+        teacherId: data.teacherId || undefined,
+        programId: data.programId,
         schedules: data.schedules ? {
           deleteMany: {},
           create: data.schedules
+            .filter((item: any) => item.dayOfWeek && item.startTime && item.endTime)
+            .map((item: any) => ({
+              centerId: cls.centerId,
+              dayOfWeek: Number(item.dayOfWeek),
+              startTime: item.startTime,
+              endTime: item.endTime,
+              room: item.room || null,
+            }))
         } : undefined
       },
+    });
+  }
+
+  @Get(':id/available-students')
+  @Permissions('CLASS_ACADEMIC.VIEW')
+  async findAvailableStudents(@Param('id') id: string, @Request() req: any) {
+    const cls = await this.prisma.class.findUnique({
+      where: { id },
+      include: { students: { select: { studentId: true } } },
+    });
+    if (!cls) throw new NotFoundException('Class not found');
+    CenterScope.validate(req.user, cls.centerId);
+
+    const enrolledIds = cls.students.map((item) => item.studentId);
+    return this.prisma.student.findMany({
+      where: {
+        centerId: cls.centerId,
+        id: enrolledIds.length ? { notIn: enrolledIds } : undefined,
+      },
+      select: {
+        id: true,
+        fullName: true,
+        code: true,
+        status: true,
+        studentPhone: true,
+      },
+      orderBy: { fullName: 'asc' },
     });
   }
 

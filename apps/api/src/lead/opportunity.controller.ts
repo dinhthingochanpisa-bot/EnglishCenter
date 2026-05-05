@@ -28,6 +28,12 @@ export class OpportunityController {
     return this.opportunityService.quoteContract(body);
   }
 
+  @Get(':id/classes')
+  @Permissions('SALES_PIPELINE.VIEW')
+  async findClassesForOpportunity(@Param('id') id: string, @Request() req: any) {
+    return this.opportunityService.findClassesForOpportunity(id, req.user);
+  }
+
   @Get(':id')
   @Permissions('SALES_PIPELINE.VIEW')
   async findOne(@Param('id') id: string, @Request() req: any) {

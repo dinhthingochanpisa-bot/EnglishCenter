@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { ModuleBoundary } from '@/components/common/ModuleBoundary';
+import { AuditTrail } from '@/components/common/AuditTrail';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -46,6 +47,17 @@ const uniqueStrings = (items: any[]) => {
 const sessionCountFromPackage = (value: string) => {
   const match = String(value || '').match(/\d+/);
   return match ? Number(match[0]) : 1;
+};
+
+const percentInputForApi = (value: string) => {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) return undefined;
+  return rawValue.includes('%') ? rawValue : `${rawValue}%`;
+};
+
+const percentInputToNumber = (value: string) => {
+  const parsedValue = Number(String(value || '').replace('%', '').replace(',', '.'));
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
 };
 
 const formatMoney = (value: any) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
@@ -176,6 +188,7 @@ type WonForm = {
   feePackage: string;
   unitPrice: string;
   contractedSessions: string;
+  discountPercent: string;
   discountSegmentCode: string;
   promotionCodes: string[];
 };
@@ -223,6 +236,24 @@ export default function LeadDetailClient({ id }: { id: string }) {
   const [wonQuoteError, setWonQuoteError] = useState<string | null>(null);
   const [isWonQuoteLoading, setIsWonQuoteLoading] = useState(false);
   const [testResultForm, setTestResultForm] = useState({ result: '', notes: '' });
+  const [showEditLeadModal, setShowEditLeadModal] = useState(false);
+  const [leadEditForm, setLeadEditForm] = useState({
+    parentName: '',
+    phone: '',
+    email: '',
+    address: '',
+    prospectiveStudentName: '',
+    studentPhone: '',
+    productInterest: '',
+    school: '',
+    grade: '',
+    target: '',
+    fatherName: '',
+    fatherPhone: '',
+    motherName: '',
+    motherPhone: '',
+    notes: '',
+  });
   const [trialClassId, setTrialClassId] = useState('');
   const [wonForm, setWonForm] = useState<WonForm>({
     classId: '',
@@ -232,6 +263,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
     feePackage: '',
     unitPrice: '',
     contractedSessions: '',
+    discountPercent: '',
     discountSegmentCode: '',
     promotionCodes: [],
   });
@@ -268,11 +300,21 @@ export default function LeadDetailClient({ id }: { id: string }) {
       setLead(data);
       apiFetch(`/leads/${id}/issues`).then(setIssues).catch(() => setIssues([]));
       const wonOpportunity = data.opportunities?.find((item: any) => item.status === 'WON') || data.opportunities?.[0];
+      const classOpportunity = data.opportunities?.[0];
       if (wonOpportunity?.status === 'WON') {
         const handover = await apiFetch(`/opportunities/${wonOpportunity.id}/handover`);
         setSalesHandover({ ...emptySalesHandover, ...(handover || {}) });
       } else {
         setSalesHandover(null);
+      }
+      if (classOpportunity?.id) {
+        apiFetch<Array<{ id: string; name: string; code: string; centerId: string; program?: { name?: string } }>>(
+          `/opportunities/${classOpportunity.id}/classes`,
+        )
+          .then(setClasses)
+          .catch(() => setClasses([]));
+      } else {
+        setClasses([]);
       }
     } catch (err: any) {
       setError(err.message || 'Không thể tải Lead');
@@ -286,9 +328,6 @@ export default function LeadDetailClient({ id }: { id: string }) {
     apiFetch<LeadAssignee[]>('/leads/assignees')
       .then(setAssignees)
       .catch(() => setAssignees([]));
-    apiFetch<Array<{ id: string; name: string; code: string; centerId: string; program?: { name?: string } }>>('/academic/classes')
-      .then(setClasses)
-      .catch(() => setClasses([]));
     apiFetch('/config/monbay-crm')
       .then(setCrmConfig)
       .catch(() => setCrmConfig(null));
@@ -320,6 +359,46 @@ export default function LeadDetailClient({ id }: { id: string }) {
     }
 
     router.push('/leads');
+  };
+
+  const openEditLeadModal = () => {
+    if (!lead) return;
+    setLeadEditForm({
+      parentName: lead.parent?.fullName || '',
+      phone: lead.parent?.phone || '',
+      email: lead.parent?.email || '',
+      address: lead.address || lead.parent?.address || '',
+      prospectiveStudentName: lead.prospectiveStudentName || '',
+      studentPhone: lead.studentPhone || '',
+      productInterest: lead.productInterest || '',
+      school: lead.school || '',
+      grade: lead.grade || '',
+      target: lead.target || lead.aim || '',
+      fatherName: lead.fatherName || '',
+      fatherPhone: lead.fatherPhone || '',
+      motherName: lead.motherName || '',
+      motherPhone: lead.motherPhone || '',
+      notes: lead.notes || '',
+    });
+    setShowEditLeadModal(true);
+  };
+
+  const handleUpdateLeadInfo = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    try {
+      await apiFetch(`/leads/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(leadEditForm),
+      });
+      setShowEditLeadModal(false);
+      await fetchLead();
+    } catch (err: any) {
+      setError(err.message || 'Khong the cap nhat thong tin lead');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleStatusUpdate = async (newStatus: string) => {
@@ -555,6 +634,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
         method: 'POST',
         body: JSON.stringify({
           classId: wonForm.classId,
+          waitForClass: !wonForm.classId,
           amount: Number(wonForm.amount || 0),
           pricingMode: 'CONFIG',
           productName: wonForm.productName || undefined,
@@ -564,6 +644,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
           contractedSessions: wonForm.contractedSessions
             ? Number(wonForm.contractedSessions)
             : undefined,
+          discountPercent: percentInputForApi(wonForm.discountPercent),
           discountSegmentCode: wonForm.discountSegmentCode || undefined,
           promotionCodes: wonForm.promotionCodes,
           studentName: lead.prospectiveStudentName,
@@ -737,28 +818,40 @@ export default function LeadDetailClient({ id }: { id: string }) {
       ...(crmConfig?.feePackages?.junior || []),
     ]);
   }, [crmConfig, pricingRows, wonForm.productName, wonForm.productRank]);
-  const selectedPricing = useMemo(
-    () =>
-      pricingRows.find(
-        (item: any) =>
-          item.product === wonForm.productName &&
-          item.rank === wonForm.productRank &&
-          item.feePackage === wonForm.feePackage,
-      ),
-    [pricingRows, wonForm.feePackage, wonForm.productName, wonForm.productRank],
-  );
+  const selectedPricing = useMemo(() => {
+    const rowsForRank = pricingRows.filter(
+      (item: any) =>
+        item.product === wonForm.productName &&
+        item.rank === wonForm.productRank,
+    );
+
+    if (!rowsForRank.length) return null;
+    return (
+      rowsForRank.find((item: any) => item.feePackage === wonForm.feePackage) ||
+      rowsForRank[0]
+    );
+  }, [pricingRows, wonForm.feePackage, wonForm.productName, wonForm.productRank]);
 
   useEffect(() => {
     if (!selectedPricing) return;
 
     const nextUnitPrice = String(Number(selectedPricing.unitPrice || 0));
-    const nextSessions = String(sessionCountFromPackage(selectedPricing.feePackage));
-    const nextAmount = String(Number(nextUnitPrice) * Number(nextSessions || 1));
+    const hasFeePackage = Boolean(wonForm.feePackage);
+    const nextSessions = hasFeePackage
+      ? String(sessionCountFromPackage(selectedPricing.feePackage))
+      : wonForm.contractedSessions;
+    const nextDiscountPercent = hasFeePackage
+      ? String(selectedPricing.discountPercent || '')
+      : wonForm.discountPercent;
+    const nextAmount = nextSessions
+      ? String(Number(nextUnitPrice) * Number(nextSessions || 1))
+      : wonForm.amount;
 
     setWonForm((current) => {
       if (
         current.unitPrice === nextUnitPrice &&
         current.contractedSessions === nextSessions &&
+        current.discountPercent === nextDiscountPercent &&
         current.amount === nextAmount
       ) {
         return current;
@@ -767,10 +860,11 @@ export default function LeadDetailClient({ id }: { id: string }) {
         ...current,
         unitPrice: nextUnitPrice,
         contractedSessions: nextSessions,
+        discountPercent: nextDiscountPercent,
         amount: nextAmount,
       };
     });
-  }, [selectedPricing]);
+  }, [selectedPricing, wonForm.amount, wonForm.contractedSessions, wonForm.discountPercent, wonForm.feePackage]);
 
   useEffect(() => {
     const unitPrice = Number(wonForm.unitPrice || 0);
@@ -802,6 +896,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
         contractedSessions: wonForm.contractedSessions
           ? Number(wonForm.contractedSessions)
           : undefined,
+        discountPercent: percentInputForApi(wonForm.discountPercent),
       }),
     })
       .then((data) => {
@@ -824,6 +919,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
     showWonForm,
     wonForm.amount,
     wonForm.contractedSessions,
+    wonForm.discountPercent,
     wonForm.discountSegmentCode,
     wonForm.promotionCodes,
   ]);
@@ -836,6 +932,15 @@ export default function LeadDetailClient({ id }: { id: string }) {
         : current.promotionCodes.filter((item) => item !== code),
     }));
   };
+
+  const configuredListPrice = Number(wonQuote?.listPrice ?? wonForm.amount ?? 0);
+  const configuredDiscountPercent = percentInputToNumber(wonForm.discountPercent);
+  const configuredPercentDiscount = configuredListPrice * (configuredDiscountPercent / 100);
+  const configuredOtherDiscount = Math.max(
+    0,
+    Number(wonQuote?.totalDiscount ?? 0) - configuredPercentDiscount,
+  );
+  const configuredFinalAmount = Number(wonQuote?.finalAmount ?? wonForm.amount ?? 0);
 
   if (isLoading && !lead) {
     return <div className="p-8 text-center text-slate-500">Đang tải chi tiết Lead...</div>;
@@ -876,6 +981,9 @@ export default function LeadDetailClient({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={openEditLeadModal} disabled={isSaving}>
+              <Pencil size={18} className="mr-2" /> Chinh sua thong tin
+            </Button>
             <Button variant="secondary" onClick={openCreateInteractionModal}>
               <PlusCircle size={18} className="mr-2" /> Ghi nhận tương tác
             </Button>
@@ -998,6 +1106,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
                 <InfoRow icon={<TargetIcon size={16} className="text-slate-400 mt-1" />} label="Điểm test" value={[lead.scoreListening, lead.scoreReading, lead.scoreWriting, lead.scoreSpeaking, lead.scoreOverall].filter((item) => item != null && item !== '').join(' / ') || 'Chưa có'} />
               </div>
             </Card>
+            <AuditTrail entityType="Lead" entityId={lead.id} />
           </div>
 
           <div className="lg:col-span-2 space-y-6">
@@ -1184,14 +1293,14 @@ export default function LeadDetailClient({ id }: { id: string }) {
                   <h4 className="text-sm font-semibold text-slate-700">Chốt thành công</h4>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <ClassSelect
-                      label="Lớp chính thức *"
+                      label="Lớp chính thức"
                       value={wonForm.classId}
                       classes={classesForLead}
                       onChange={(value) => setWonForm((form) => ({ ...form, classId: value }))}
-                      required
+                      emptyLabel="Pending - Chờ xếp lớp"
                     />
                     <LabeledInput
-                      label="Giá trị hợp đồng"
+                      label="Gia NY"
                       type="number"
                       value={wonForm.amount}
                       onChange={(value) => setWonForm((form) => ({ ...form, amount: value }))}
@@ -1210,6 +1319,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
                           feePackage: '',
                           unitPrice: '',
                           contractedSessions: '',
+                          discountPercent: '',
                           amount: '',
                         }))
                       }
@@ -1225,6 +1335,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
                           feePackage: '',
                           unitPrice: '',
                           contractedSessions: '',
+                          discountPercent: '',
                           amount: '',
                         }))
                       }
@@ -1239,6 +1350,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
                           feePackage: value,
                           unitPrice: '',
                           contractedSessions: '',
+                          discountPercent: '',
                           amount: '',
                         }))
                       }
@@ -1248,6 +1360,11 @@ export default function LeadDetailClient({ id }: { id: string }) {
                       type="number"
                       value={wonForm.unitPrice}
                       onChange={(value) => setWonForm((form) => ({ ...form, unitPrice: value }))}
+                    />
+                    <LabeledInput
+                      label="CK%"
+                      value={wonForm.discountPercent}
+                      onChange={(value) => setWonForm((form) => ({ ...form, discountPercent: value }))}
                     />
                     <LabeledInput
                       label="So buoi"
@@ -1294,7 +1411,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Gia sau cau hinh</p>
                         <p className="mt-1 text-xl font-bold text-slate-900">
-                          {formatMoney(wonQuote?.finalAmount || wonForm.amount)}
+                          {formatMoney(configuredFinalAmount)}
                         </p>
                       </div>
                       {isWonQuoteLoading ? <span className="text-slate-400">Dang tinh...</span> : null}
@@ -1302,24 +1419,28 @@ export default function LeadDetailClient({ id }: { id: string }) {
                     {wonQuoteError ? (
                       <p className="mt-2 text-red-600">{wonQuoteError}</p>
                     ) : wonQuote ? (
-                      <div className="mt-3 grid grid-cols-3 gap-3">
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
                         <div>
-                          <span className="text-slate-500">Gia goc</span>
-                          <div className="font-semibold">{formatMoney(wonQuote.listPrice)}</div>
+                          <span className="text-slate-500">HP niem yet</span>
+                          <div className="font-semibold">{formatMoney(configuredListPrice)}</div>
                         </div>
                         <div>
-                          <span className="text-slate-500">Chiet khau</span>
-                          <div className="font-semibold">{formatMoney(wonQuote.totalDiscount)}</div>
+                          <span className="text-slate-500">HP giam tru tu CK%</span>
+                          <div className="font-semibold">{formatMoney(configuredPercentDiscount)}</div>
                         </div>
                         <div>
-                          <span className="text-slate-500">Con thu</span>
-                          <div className="font-semibold text-emerald-700">{formatMoney(wonQuote.finalAmount)}</div>
+                          <span className="text-slate-500">Giam gia CTKM khac</span>
+                          <div className="font-semibold">{formatMoney(configuredOtherDiscount)}</div>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">HP thuc dong</span>
+                          <div className="font-semibold text-emerald-700">{formatMoney(configuredFinalAmount)}</div>
                         </div>
                       </div>
                     ) : null}
                   </div>
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={isSaving || !wonForm.classId || Boolean(wonQuoteError)}>
+                    <Button type="submit" disabled={isSaving || Boolean(wonQuoteError)}>
                       {isSaving ? 'Đang chốt...' : 'Chốt và chuyển học sinh hoạt động'}
                     </Button>
                   </div>
@@ -1623,6 +1744,34 @@ export default function LeadDetailClient({ id }: { id: string }) {
         </div>
       </div>
 
+      {showEditLeadModal && (
+        <Modal title="Chinh sua thong tin lead" onClose={() => setShowEditLeadModal(false)}>
+          <form onSubmit={handleUpdateLeadInfo} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <LabeledInput label="Ho ten phu huynh" value={leadEditForm.parentName} onChange={(value) => setLeadEditForm((form) => ({ ...form, parentName: value }))} required />
+              <LabeledInput label="SDT phu huynh" value={leadEditForm.phone} onChange={(value) => setLeadEditForm((form) => ({ ...form, phone: value }))} required />
+              <LabeledInput label="Email" value={leadEditForm.email} onChange={(value) => setLeadEditForm((form) => ({ ...form, email: value }))} />
+              <LabeledInput label="Dia chi" value={leadEditForm.address} onChange={(value) => setLeadEditForm((form) => ({ ...form, address: value }))} />
+              <LabeledInput label="Ho ten hoc sinh" value={leadEditForm.prospectiveStudentName} onChange={(value) => setLeadEditForm((form) => ({ ...form, prospectiveStudentName: value }))} />
+              <LabeledInput label="SDT hoc sinh" value={leadEditForm.studentPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, studentPhone: value }))} />
+              <LabeledInput label="San pham" value={leadEditForm.productInterest} onChange={(value) => setLeadEditForm((form) => ({ ...form, productInterest: value }))} />
+              <LabeledInput label="Truong" value={leadEditForm.school} onChange={(value) => setLeadEditForm((form) => ({ ...form, school: value }))} />
+              <LabeledInput label="Lop/Khoi" value={leadEditForm.grade} onChange={(value) => setLeadEditForm((form) => ({ ...form, grade: value }))} />
+              <LabeledInput label="Muc tieu" value={leadEditForm.target} onChange={(value) => setLeadEditForm((form) => ({ ...form, target: value }))} />
+              <LabeledInput label="Ten bo" value={leadEditForm.fatherName} onChange={(value) => setLeadEditForm((form) => ({ ...form, fatherName: value }))} />
+              <LabeledInput label="SDT bo" value={leadEditForm.fatherPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, fatherPhone: value }))} />
+              <LabeledInput label="Ten me" value={leadEditForm.motherName} onChange={(value) => setLeadEditForm((form) => ({ ...form, motherName: value }))} />
+              <LabeledInput label="SDT me" value={leadEditForm.motherPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, motherPhone: value }))} />
+            </div>
+            <div>
+              <label className="text-sm text-slate-500">Ghi chu</label>
+              <textarea className="mt-1 min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={leadEditForm.notes} onChange={(event) => setLeadEditForm((form) => ({ ...form, notes: event.target.value }))} />
+            </div>
+            <ModalActions isSaving={isSaving} onCancel={() => setShowEditLeadModal(false)} submitLabel="Luu thong tin" />
+          </form>
+        </Modal>
+      )}
+
       {showInteractionModal && (
         <Modal
           title={editingInteractionId ? 'Sửa tương tác' : 'Ghi nhận tương tác'}
@@ -1855,12 +2004,14 @@ function ClassSelect({
   classes,
   onChange,
   required,
+  emptyLabel = 'Chon lop',
 }: {
   label: string;
   value: string;
   classes: Array<{ id: string; name: string; code: string; program?: { name?: string } }>;
   onChange: (value: string) => void;
   required?: boolean;
+  emptyLabel?: string;
 }) {
   return (
     <div>
@@ -1871,7 +2022,7 @@ function ClassSelect({
         onChange={(event) => onChange(event.target.value)}
         required={required}
       >
-        <option value="">Chọn lớp</option>
+        <option value="">{emptyLabel}</option>
         {classes.map((item) => (
           <option key={item.id} value={item.id}>
             {item.code} - {item.name}{item.program?.name ? ` (${item.program.name})` : ''}

@@ -48,6 +48,11 @@ const DEFAULT_MONBAY_CONFIG = {
     amount: number | null;
     active: boolean;
   }>,
+  contractCode: {
+    template: '{seq}/{year}/HDDV-PISA/{centerCode}',
+    startNumber: 1,
+    padding: 0,
+  },
 };
 
 const USER_SELECT = {
@@ -91,6 +96,10 @@ export class AdminService {
       feePackages: {
         ...DEFAULT_MONBAY_CONFIG.feePackages,
         ...(config?.feePackages || {}),
+      },
+      contractCode: {
+        ...DEFAULT_MONBAY_CONFIG.contractCode,
+        ...(config?.contractCode || {}),
       },
     };
   }
@@ -577,6 +586,12 @@ export class AdminService {
       const promotions = this.normalizePromotions(data.items || []);
       config.promotions = promotions;
       await this.saveSystemConfig('MONBAY_CRM_PROMOTIONS', promotions);
+    } else if (section === 'contract-code') {
+      config.contractCode = {
+        template: String(data.template || DEFAULT_MONBAY_CONFIG.contractCode.template).trim(),
+        startNumber: Math.max(1, Number(data.startNumber || 1)),
+        padding: Math.max(0, Number(data.padding || 0)),
+      };
     } else {
       throw new BadRequestException('Unsupported config section');
     }
@@ -677,6 +692,7 @@ export class AdminService {
     take?: number;
     skip?: number;
     entity?: string;
+    entityId?: string;
     action?: string;
     actorId?: string;
     from?: Date;
@@ -687,6 +703,7 @@ export class AdminService {
       take = 50,
       skip = 0,
       entity,
+      entityId,
       action,
       actorId,
       from,
@@ -700,6 +717,7 @@ export class AdminService {
     }
 
     if (entity) where.entityType = entity;
+    if (entityId) where.entityId = entityId;
     if (action) where.action = action;
     if (actorId) where.actorId = actorId;
     if (from || to) {

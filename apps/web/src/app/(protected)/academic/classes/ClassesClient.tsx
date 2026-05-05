@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Building2,
   BookOpen,
+  X,
 } from 'lucide-react';
 import { ModuleBoundary } from '@/components/common/ModuleBoundary';
 import Link from 'next/link';
@@ -24,8 +25,20 @@ import Link from 'next/link';
 export default function ClassesClient() {
   const [data, setData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [centers, setCenters] = useState<any[]>([]);
+  const [classForm, setClassForm] = useState({
+    name: '',
+    code: '',
+    programId: '',
+    centerId: '',
+    capacity: '20',
+    status: 'PLANNING',
+  });
 
   const fetchClasses = async () => {
     setIsLoading(true);
@@ -41,7 +54,43 @@ export default function ClassesClient() {
 
   useEffect(() => {
     fetchClasses();
+    apiFetch('/academic/programs').then(setPrograms).catch(() => setPrograms([]));
+    apiFetch('/centers').then(setCenters).catch(() => setCenters([]));
   }, []);
+
+  useEffect(() => {
+    setClassForm((current) => ({
+      ...current,
+      programId: current.programId || programs[0]?.id || '',
+      centerId: current.centerId || centers[0]?.id || '',
+    }));
+  }, [centers, programs]);
+
+  const handleCreateClass = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    try {
+      await apiFetch('/academic/classes', {
+        method: 'POST',
+        body: JSON.stringify({ ...classForm, capacity: Number(classForm.capacity || 20) }),
+      });
+      setShowCreateModal(false);
+      setClassForm({
+        name: '',
+        code: '',
+        programId: programs[0]?.id || '',
+        centerId: centers[0]?.id || '',
+        capacity: '20',
+        status: 'PLANNING',
+      });
+      await fetchClasses();
+    } catch (err: any) {
+      setError(err.message || 'Khong the mo lop moi');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -66,7 +115,7 @@ export default function ClassesClient() {
             <h1 className="text-2xl font-bold text-slate-900">Quản lý lớp học</h1>
             <p className="text-sm text-slate-500">Tổ chức lớp, xếp lịch và theo dõi học tập</p>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={() => setShowCreateModal(true)}>
             <Plus size={18} /> Mở lớp mới
           </Button>
         </div>
@@ -149,6 +198,63 @@ export default function ClassesClient() {
                 </Card>
               </Link>
             ))}
+          </div>
+        )}
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+            <form onSubmit={handleCreateClass} className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                <h2 className="text-lg font-bold text-slate-900">Mo lop moi</h2>
+                <button type="button" onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-700">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                <label className="text-sm text-slate-600">
+                  Ten lop *
+                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.name} onChange={(event) => setClassForm((form) => ({ ...form, name: event.target.value }))} required />
+                </label>
+                <label className="text-sm text-slate-600">
+                  Ma lop
+                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.code} onChange={(event) => setClassForm((form) => ({ ...form, code: event.target.value }))} placeholder="Tu sinh neu de trong" />
+                </label>
+                <label className="text-sm text-slate-600">
+                  Chuong trinh *
+                  <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.programId} onChange={(event) => setClassForm((form) => ({ ...form, programId: event.target.value }))} required>
+                    <option value="">Chon chuong trinh</option>
+                    {programs.map((program: any) => (
+                      <option key={program.id} value={program.id}>{program.product?.name ? `${program.product.name} - ` : ''}{program.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm text-slate-600">
+                  Trung tam *
+                  <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.centerId} onChange={(event) => setClassForm((form) => ({ ...form, centerId: event.target.value }))} required>
+                    <option value="">Chon trung tam</option>
+                    {centers.map((center: any) => (
+                      <option key={center.id} value={center.id}>{center.code} - {center.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm text-slate-600">
+                  Si so toi da
+                  <input type="number" min="1" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.capacity} onChange={(event) => setClassForm((form) => ({ ...form, capacity: event.target.value }))} />
+                </label>
+                <label className="text-sm text-slate-600">
+                  Trang thai
+                  <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.status} onChange={(event) => setClassForm((form) => ({ ...form, status: event.target.value }))}>
+                    <option value="PLANNING">PLANNING</option>
+                    <option value="ACTIVE">ACTIVE</option>
+                  </select>
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+                <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>Huy</Button>
+                <Button type="submit" disabled={isSaving || !classForm.name || !classForm.programId || !classForm.centerId}>
+                  {isSaving ? 'Dang luu...' : 'Mo lop'}
+                </Button>
+              </div>
+            </form>
           </div>
         )}
       </div>

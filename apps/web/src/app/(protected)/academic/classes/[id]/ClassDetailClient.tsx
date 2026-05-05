@@ -11,7 +11,6 @@ import {
   Users,
   CheckCircle2,
   GraduationCap,
-  Settings,
   Plus,
   Trash2,
   Loader2,
@@ -19,10 +18,13 @@ import {
   Clock,
   MapPin,
   Save,
+  X,
+  Pencil,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAppDialog } from '@/providers/AppDialogProvider';
+import { AuditTrail } from '@/components/common/AuditTrail';
 
 type Tab = 'overview' | 'roster' | 'attendance' | 'results';
 
@@ -32,8 +34,14 @@ export default function ClassDetailClient({ id }: { id: string }) {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [availableStudents, setAvailableStudents] = useState<any[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [editForm, setEditForm] = useState({ name: '', code: '', status: 'PLANNING', capacity: '20' });
   const router = useRouter();
 
   const fetchData = async () => {
@@ -60,6 +68,96 @@ export default function ClassDetailClient({ id }: { id: string }) {
   useEffect(() => {
     fetchData();
   }, [id]);
+
+  const openEnrollModal = async () => {
+    setShowEnrollModal(true);
+    setSelectedStudentId('');
+    try {
+      const students = await apiFetch(`/academic/classes/${id}/available-students`);
+      setAvailableStudents(students as any[]);
+    } catch (err: any) {
+      setAvailableStudents([]);
+      notify({
+        type: 'error',
+        title: 'Khong the tai danh sach hoc sinh',
+        message: err.message,
+      });
+    }
+  };
+
+  const openEditModal = () => {
+    setEditForm({
+      name: data.name || '',
+      code: data.code || '',
+      status: data.status || 'PLANNING',
+      capacity: String(data.capacity || 20),
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateClass = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      await apiFetch(`/academic/classes/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          code: editForm.code.trim(),
+          status: editForm.status,
+          capacity: Number(editForm.capacity || 20),
+        }),
+      });
+      setShowEditModal(false);
+      await fetchData();
+      notify({ type: 'success', title: 'Da cap nhat thong tin lop' });
+    } catch (err: any) {
+      notify({ type: 'error', title: 'Khong the cap nhat lop', message: err.message });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEnrollStudent = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedStudentId) return;
+
+    setIsSaving(true);
+    try {
+      await apiFetch(`/academic/classes/${id}/enroll`, {
+        method: 'POST',
+        body: JSON.stringify({ studentId: selectedStudentId }),
+      });
+      setShowEnrollModal(false);
+      await fetchData();
+      notify({ type: 'success', title: 'Da them hoc sinh vao lop' });
+    } catch (err: any) {
+      notify({
+        type: 'error',
+        title: 'Khong the them hoc sinh',
+        message: err.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUnenrollStudent = async (studentId: string) => {
+    setIsSaving(true);
+    try {
+      await apiFetch(`/academic/classes/${id}/unenroll/${studentId}`, { method: 'DELETE' });
+      await fetchData();
+      notify({ type: 'success', title: 'Da xoa hoc sinh khoi lop' });
+    } catch (err: any) {
+      notify({
+        type: 'error',
+        title: 'Khong the xoa hoc sinh',
+        message: err.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSaveAttendance = async () => {
     try {
@@ -116,8 +214,8 @@ export default function ClassDetailClient({ id }: { id: string }) {
           <p className="text-sm text-slate-500 font-medium">{data.program?.name} • {data.code}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
-            <Settings size={18} /> Cấu hình
+          <Button variant="outline" className="gap-2" onClick={openEditModal}>
+            <Pencil size={18} /> Chinh sua
           </Button>
         </div>
       </div>
@@ -212,6 +310,7 @@ export default function ClassDetailClient({ id }: { id: string }) {
                   </div>
                </div>
             </Card>
+            <AuditTrail entityType="Class" entityId={id} />
           </div>
         )}
 
@@ -219,7 +318,7 @@ export default function ClassDetailClient({ id }: { id: string }) {
           <Card className="p-0 overflow-hidden">
             <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Danh sách học sinh ({data.students?.length || 0})</h3>
-               <Button size="sm" className="gap-2">
+               <Button size="sm" className="gap-2" onClick={openEnrollModal}>
                  <Plus size={16} /> Thêm học sinh
                </Button>
             </div>
@@ -250,7 +349,11 @@ export default function ClassDetailClient({ id }: { id: string }) {
                     </td>
                     <td className="px-6 py-4 text-xs text-slate-500">{new Date(s.joinedAt).toLocaleDateString('vi-VN')}</td>
                     <td className="px-6 py-4 text-right">
-                       <button className="text-slate-300 hover:text-red-500 transition-colors">
+                       <button
+                         className="text-slate-300 hover:text-red-500 transition-colors"
+                         onClick={() => handleUnenrollStudent(s.student.id)}
+                         disabled={isSaving}
+                       >
                          <Trash2 size={16} />
                        </button>
                     </td>
@@ -333,7 +436,102 @@ export default function ClassDetailClient({ id }: { id: string }) {
           </div>
         )}
       </div>
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <form onSubmit={handleUpdateClass} className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-slate-900">Chinh sua thong tin lop</h2>
+              <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+              <ClassEditField label="Ten lop" value={editForm.name} onChange={(value) => setEditForm((form) => ({ ...form, name: value }))} required />
+              <ClassEditField label="Ma lop" value={editForm.code} onChange={(value) => setEditForm((form) => ({ ...form, code: value }))} required />
+              <ClassEditField label="Si so toi da" type="number" value={editForm.capacity} onChange={(value) => setEditForm((form) => ({ ...form, capacity: value }))} required />
+              <label className="text-sm text-slate-600">
+                Trang thai
+                <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={editForm.status} onChange={(event) => setEditForm((form) => ({ ...form, status: event.target.value }))}>
+                  <option value="PLANNING">PLANNING</option>
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="FINISHED">FINISHED</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+              </label>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Huy</Button>
+              <Button type="submit" disabled={isSaving}>{isSaving ? 'Dang luu...' : 'Luu thong tin'}</Button>
+            </div>
+          </form>
+        </div>
+      )}
+      {showEnrollModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <form onSubmit={handleEnrollStudent} className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-slate-900">Them hoc sinh vao lop</h2>
+              <button type="button" onClick={() => setShowEnrollModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              <label className="text-sm text-slate-600">
+                Hoc sinh
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20"
+                  value={selectedStudentId}
+                  onChange={(event) => setSelectedStudentId(event.target.value)}
+                  required
+                >
+                  <option value="">Chon hoc sinh</option>
+                  {availableStudents.map((student: any) => (
+                    <option key={student.id} value={student.id}>
+                      {student.code} - {student.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!availableStudents.length && (
+                <p className="mt-3 text-sm text-slate-400">Khong con hoc sinh phu hop de them vao lop nay.</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+              <Button type="button" variant="outline" onClick={() => setShowEnrollModal(false)}>Huy</Button>
+              <Button type="submit" disabled={isSaving || !selectedStudentId}>
+                {isSaving ? 'Dang luu...' : 'Them hoc sinh'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
 
+function ClassEditField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="text-sm text-slate-600">
+      {label}
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20"
+      />
+    </label>
+  );
+}

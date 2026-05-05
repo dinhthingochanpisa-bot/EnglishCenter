@@ -751,6 +751,7 @@ model AcademicResult {
 }
 
 enum AcademicResultType {
+  PLACEMENT
   MOCK
   MIDTERM
   FINAL

@@ -39,6 +39,12 @@ type ContractQuote = {
   }>;
 };
 
+type ContractCodeConfig = {
+  template?: string;
+  startNumber?: number | string;
+  padding?: number | string;
+};
+
 @Injectable()
 export class ContractService {
   constructor(
@@ -80,7 +86,8 @@ export class ContractService {
   private normalizePercent(value: any) {
     if (value === '' || value == null) return null;
     if (typeof value === 'number') {
-      return Number.isFinite(value) ? value : null;
+      if (!Number.isFinite(value)) return null;
+      return value >= 1 ? value / 100 : value;
     }
 
     const raw = String(value).trim();
@@ -88,7 +95,7 @@ export class ContractService {
 
     const parsed = Number(raw.replace(',', '.').replace('%', ''));
     if (!Number.isFinite(parsed)) return null;
-    return raw.includes('%') ? parsed / 100 : parsed;
+    return raw.includes('%') || parsed >= 1 ? parsed / 100 : parsed;
   }
 
   private roundMoney(value: number) {
@@ -132,6 +139,48 @@ export class ContractService {
       discountSegments: segmentItems,
       promotions: promotionItems,
     };
+  }
+
+  async generateContractCode(centerId: string, tx: any = this.prisma) {
+    const config = await this.getMonbayConfig();
+    const codeConfig: ContractCodeConfig = config.contractCode || {};
+    const template = String(codeConfig.template || '{seq}/{year}/HDDV-PISA/{centerCode}').trim();
+    const startNumber = Math.max(1, Number(codeConfig.startNumber || 1));
+    const padding = Math.max(0, Number(codeConfig.padding || 0));
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const center = await tx.center.findUnique({
+      where: { id: centerId },
+      select: { code: true, name: true },
+    });
+    const centerCode = String(center?.code || centerId.slice(0, 4)).toUpperCase();
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const contractCount = await tx.contract.count({
+        where: {
+          centerId,
+          createdAt: {
+            gte: new Date(now.getFullYear(), 0, 1),
+            lt: new Date(now.getFullYear() + 1, 0, 1),
+          },
+        },
+      });
+      const seq = String(startNumber + contractCount + attempt).padStart(padding, '0');
+      const candidate = template
+        .replaceAll('{seq}', seq)
+        .replaceAll('{year}', year)
+        .replaceAll('{month}', month)
+        .replaceAll('{day}', day)
+        .replaceAll('{centerCode}', centerCode)
+        .replaceAll('{center}', centerCode);
+
+      const existing = await tx.contract.findUnique({ where: { code: candidate } });
+      if (!existing) return candidate;
+    }
+
+    return `CON-${centerCode}-${Date.now().toString().slice(-6)}`;
   }
 
   private ensureValidAmount(name: string, value: number) {
@@ -205,6 +254,8 @@ export class ContractService {
 
   private calculateConfiguredQuote(input: {
     listPrice: number;
+    discountPercent?: number | string;
+    discountAmount?: number | string;
     discountSegmentCode?: string;
     promotionCodes?: string[];
     contractedSessions?: number;
@@ -225,6 +276,30 @@ export class ContractService {
     let basePercent = 0;
     let baseAmount = 0;
     let extraAmount = 0;
+
+    const configuredPercent = this.normalizePercent(input.discountPercent);
+    if (configuredPercent) {
+      basePercent += configuredPercent;
+      breakdown.push({
+        code: 'CONFIG_CK',
+        name: 'Configured discount percent',
+        mode: 'BASE',
+        amount: this.roundMoney(listPrice * configuredPercent),
+        percent: configuredPercent,
+      });
+    }
+
+    const configuredAmount = this.optionalNumber(input.discountAmount);
+    if (configuredAmount) {
+      baseAmount += configuredAmount;
+      breakdown.push({
+        code: 'CONFIG_AMOUNT',
+        name: 'Configured discount amount',
+        mode: 'BASE_VND',
+        amount: configuredAmount,
+        percent: null,
+      });
+    }
 
     const segmentCode = input.discountSegmentCode?.trim();
     const segment = segmentCode
@@ -383,6 +458,8 @@ export class ContractService {
 
   async quote(data: {
     listPrice: number;
+    discountPercent?: number | string;
+    discountAmount?: number | string;
     discountSegmentCode?: string;
     promotionCodes?: string[];
     contractedSessions?: number;
@@ -390,6 +467,8 @@ export class ContractService {
     const config = await this.getMonbayConfig();
     return this.calculateConfiguredQuote({
       listPrice: Number(data.listPrice),
+      discountPercent: data.discountPercent,
+      discountAmount: data.discountAmount,
       discountSegmentCode: data.discountSegmentCode,
       promotionCodes: data.promotionCodes,
       contractedSessions: data.contractedSessions
@@ -448,6 +527,8 @@ export class ContractService {
     const quote = useConfigPricing
       ? await this.quote({
           listPrice: Number(data.listPrice),
+          discountPercent: data.discountPercent,
+          discountAmount: data.discountAmount,
           discountSegmentCode: data.discountSegmentCode,
           promotionCodes: data.promotionCodes,
           contractedSessions: data.contractedSessions,
@@ -460,10 +541,10 @@ export class ContractService {
 
     const plan = await this.ensurePlanForContract(data);
 
-    const code = `CON-${centerId.substring(0, 4).toUpperCase()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
     const detailUnitPrice = Number(data.unitPrice || quote.listPrice);
 
     return this.prisma.$transaction(async (tx) => {
+      const code = await this.generateContractCode(centerId, tx);
       const contract = await tx.contract.create({
         data: {
           code,

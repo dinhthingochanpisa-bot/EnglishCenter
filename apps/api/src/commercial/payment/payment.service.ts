@@ -24,8 +24,20 @@ export class PaymentService {
     });
   }
 
+  async getContracts(where: any) {
+    return this.prisma.contract.findMany({
+      where,
+      include: {
+        student: { select: { id: true, fullName: true, code: true } },
+        center: { select: { id: true, name: true, code: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async create(data: CreatePaymentDto, userId: string, user: any) {
     const { contractId, amount, method, type, notes } = data;
+    const contractLookup = String(contractId || '').trim();
 
     // 1. Chặn amount <= 0
     if (Number(amount) <= 0) {
@@ -33,8 +45,13 @@ export class PaymentService {
     }
 
     // 2. Fetch Contract and validate center scope
-    const contract = await this.prisma.contract.findUnique({
-      where: { id: contractId },
+    const contract = await this.prisma.contract.findFirst({
+      where: {
+        OR: [
+          { id: contractLookup },
+          { code: contractLookup },
+        ],
+      },
       include: {
         paymentSchedule: {
           where: { remainingAmount: { gt: 0 } },
@@ -66,7 +83,7 @@ export class PaymentService {
       // Create the payment record
       const payment = await tx.payment.create({
         data: {
-          contractId,
+          contractId: contract.id,
           centerId: contract.centerId,
           amount,
           method: method || 'TRANSFER',
@@ -135,7 +152,7 @@ export class PaymentService {
         contract: {
           include: {
             student: { select: { id: true, fullName: true, code: true } },
-            center: { select: { name: true } },
+            center: { select: { name: true, code: true } },
           },
         },
       },

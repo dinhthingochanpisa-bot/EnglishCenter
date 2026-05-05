@@ -23,11 +23,27 @@ import {
   Phone,
   MapPin,
   Plus,
+  Pencil,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AuditTrail } from '@/components/common/AuditTrail';
 
 type Tab = 'info' | 'contracts' | 'academic' | 'care' | 'exam' | 'issues' | 'notes';
+
+const parseScoreInput = (value: string) => {
+  const normalizedValue = value.trim().replace(',', '.');
+  if (!normalizedValue) return undefined;
+
+  const parsedValue = Number(normalizedValue);
+  return Number.isFinite(parsedValue) ? parsedValue : Number.NaN;
+};
+
+const isHalfStepScore = (value?: number) => {
+  if (value === undefined) return true;
+  return Math.abs(value * 2 - Math.round(value * 2)) < 1e-9;
+};
 
 export default function StudentDetailClient({ id }: { id: string }) {
   const [activeTab, setActiveTab] = useState<Tab>('info');
@@ -44,7 +60,33 @@ export default function StudentDetailClient({ id }: { id: string }) {
   const [showWarrantyModal, setShowWarrantyModal] = useState(false);
   const [showRenewalModal, setShowRenewalModal] = useState(false);
   const [showIssueModal, setShowIssueModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
   const [programs, setPrograms] = useState<any[]>([]);
+  const [editForm, setEditForm] = useState({
+    fullName: '',
+    birthday: '',
+    gender: 'OTHER',
+    status: 'ACTIVE',
+    currentGrade: '',
+    school: '',
+    target: '',
+    aim: '',
+    studentPhone: '',
+    address: '',
+    notes: '',
+    parentFullName: '',
+    parentPhone: '',
+    parentEmail: '',
+    parentRelationship: 'Phụ huynh',
+    parentAddress: '',
+  });
+  const [resultForm, setResultForm] = useState({
+    type: 'PLACEMENT',
+    score: '',
+    date: new Date().toISOString().slice(0, 10),
+    comments: '',
+  });
   const [careForm, setCareForm] = useState({
     type: 'FIRST_LESSON',
     title: '',
@@ -104,6 +146,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
   const totalContractValue = studentContracts.reduce((sum: number, contract: any) => sum + Number(contract.finalAmount || 0), 0);
   const totalPaidAmount = studentContracts.reduce((sum: number, contract: any) => sum + getContractPaidAmount(contract), 0);
   const totalDebtAmount = studentContracts.reduce((sum: number, contract: any) => sum + getContractDebtAmount(contract), 0);
+  const primaryRelation = student?.relations?.find((rel: any) => rel.isPrimaryContact) || student?.relations?.[0] || null;
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -133,6 +176,80 @@ export default function StudentDetailClient({ id }: { id: string }) {
       .then(setPrograms)
       .catch(() => setPrograms([]));
   }, [id]);
+
+  const openEditModal = () => {
+    setEditForm({
+      fullName: student.fullName || '',
+      birthday: student.birthday ? new Date(student.birthday).toISOString().slice(0, 10) : '',
+      gender: student.gender || 'OTHER',
+      status: student.status || 'ACTIVE',
+      currentGrade: student.currentGrade || '',
+      school: student.school || '',
+      target: student.target || '',
+      aim: student.aim || '',
+      studentPhone: student.studentPhone || '',
+      address: student.address || '',
+      notes: student.notes || '',
+      parentFullName: primaryRelation?.parent?.fullName || '',
+      parentPhone: primaryRelation?.parent?.phone || '',
+      parentEmail: primaryRelation?.parent?.email || '',
+      parentRelationship: primaryRelation?.relationship || 'Phụ huynh',
+      parentAddress: primaryRelation?.parent?.address || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateStudent = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    try {
+      await apiFetch(`/students/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          ...editForm,
+          primaryParent: {
+            fullName: editForm.parentFullName,
+            phone: editForm.parentPhone,
+            email: editForm.parentEmail,
+            relationship: editForm.parentRelationship,
+            address: editForm.parentAddress,
+          },
+        }),
+      });
+      setShowEditModal(false);
+      await fetchData();
+    } catch (err: any) {
+      setError(err.message || 'Khong the cap nhat thong tin hoc sinh');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCreateAcademicResult = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    try {
+      await apiFetch('/academic/assessments/results', {
+        method: 'POST',
+        body: JSON.stringify({
+          studentId: id,
+          type: resultForm.type,
+          score: Number(resultForm.score),
+          date: resultForm.date,
+          comments: resultForm.comments.trim() || undefined,
+        }),
+      });
+      setResultForm({ type: 'PLACEMENT', score: '', date: new Date().toISOString().slice(0, 10), comments: '' });
+      setShowResultModal(false);
+      await fetchData();
+    } catch (err: any) {
+      setError(err.message || 'Khong the luu ket qua hoc tap');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleCreateCareEvent = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -178,16 +295,29 @@ export default function StudentDetailClient({ id }: { id: string }) {
 
   const handleCreateExamEvent = async (event: React.FormEvent) => {
     event.preventDefault();
-    setIsSaving(true);
     setError(null);
+
+    const score = parseScoreInput(examForm.score);
+    const targetScore = parseScoreInput(examForm.targetScore);
+    if (
+      Number.isNaN(score) ||
+      Number.isNaN(targetScore) ||
+      !isHalfStepScore(score) ||
+      !isHalfStepScore(targetScore)
+    ) {
+      setError('Diem thi va muc tieu phai la so theo buoc 0.5.');
+      return;
+    }
+
+    setIsSaving(true);
     try {
       await apiFetch(`/students/${id}/exam-events`, {
         method: 'POST',
         body: JSON.stringify({
           type: examForm.type,
           scheduledAt: examForm.scheduledAt,
-          score: examForm.score === '' ? undefined : Number(examForm.score),
-          targetScore: examForm.targetScore === '' ? undefined : Number(examForm.targetScore),
+          score,
+          targetScore,
           notes: examForm.notes.trim() || undefined,
           actionPlan: examForm.actionPlan.trim() || undefined,
           markCompleted: examForm.markCompleted,
@@ -380,6 +510,9 @@ export default function StudentDetailClient({ id }: { id: string }) {
           </div>
           <p className="text-sm text-slate-500 font-medium">Mã học sinh: {student.code} • {student.center?.name}</p>
         </div>
+        <Button variant="outline" className="gap-2" onClick={openEditModal}>
+          <Pencil size={16} /> Chinh sua
+        </Button>
       </div>
 
       <div className="flex border-b border-slate-200">
@@ -467,6 +600,9 @@ export default function StudentDetailClient({ id }: { id: string }) {
                   </div>
                ))}
             </Card>
+            <div className="md:col-span-2">
+              <AuditTrail entityType="STUDENT" entityId={id} />
+            </div>
           </div>
         )}
 
@@ -602,7 +738,12 @@ export default function StudentDetailClient({ id }: { id: string }) {
              </div>
 
              <Card className="p-6">
-                <h3 className="text-sm font-bold text-slate-900 mb-6 uppercase tracking-wider">Kết quả học tập (Assessment)</h3>
+                <div className="mb-6 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Kết quả học tập (Assessment)</h3>
+                  <Button size="sm" className="gap-2" onClick={() => setShowResultModal(true)}>
+                    <Plus size={16} /> Nhập kết quả
+                  </Button>
+                </div>
                 <div className="space-y-4">
                    {academic?.results?.map((res: any) => (
                       <div key={res.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
@@ -611,7 +752,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
                                {res.type?.charAt(0)}
                             </div>
                             <div>
-                               <p className="text-sm font-bold text-slate-900">{res.type} Test</p>
+                               <p className="text-sm font-bold text-slate-900">{getAcademicResultTypeLabel(res.type)}</p>
                                <p className="text-xs text-slate-500">{res.class?.name || 'Global'}</p>
                             </div>
                          </div>
@@ -916,6 +1057,107 @@ export default function StudentDetailClient({ id }: { id: string }) {
         )}
       </div>
 
+      {showResultModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <form onSubmit={handleCreateAcademicResult} className="w-full max-w-xl rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h3 className="font-semibold text-slate-900">Nhap ket qua hoc tap</h3>
+              <button type="button" onClick={() => setShowResultModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-4 p-6">
+              <label className="text-sm text-slate-500">
+                Loai ket qua
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  value={resultForm.type}
+                  onChange={(event) => setResultForm((form) => ({ ...form, type: event.target.value }))}
+                >
+                  <option value="PLACEMENT">Test dau vao</option>
+                  <option value="MOCK">Mock test</option>
+                  <option value="MIDTERM">Giua khoa</option>
+                  <option value="FINAL">Cuoi khoa</option>
+                </select>
+              </label>
+              <StudentEditField label="Diem" type="number" value={resultForm.score} onChange={(value) => setResultForm((form) => ({ ...form, score: value }))} required />
+              <StudentEditField label="Ngay ghi nhan" type="date" value={resultForm.date} onChange={(value) => setResultForm((form) => ({ ...form, date: value }))} required />
+              <label className="text-sm text-slate-500">
+                Nhan xet
+                <textarea className="mt-1 min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={resultForm.comments} onChange={(event) => setResultForm((form) => ({ ...form, comments: event.target.value }))} />
+              </label>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+              <Button type="button" variant="outline" onClick={() => setShowResultModal(false)}>Huy</Button>
+              <Button type="submit" disabled={isSaving || !resultForm.score}>{isSaving ? 'Dang luu...' : 'Luu ket qua'}</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <form onSubmit={handleUpdateStudent} className="w-full max-w-3xl rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h3 className="font-semibold text-slate-900">Chinh sua thong tin hoc sinh</h3>
+              <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+              <StudentEditField label="Ho ten" value={editForm.fullName} onChange={(value) => setEditForm((form) => ({ ...form, fullName: value }))} required />
+              <StudentEditField label="Ngay sinh" type="date" value={editForm.birthday} onChange={(value) => setEditForm((form) => ({ ...form, birthday: value }))} />
+              <label className="text-sm text-slate-500">
+                Gioi tinh
+                <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.gender} onChange={(event) => setEditForm((form) => ({ ...form, gender: event.target.value }))}>
+                  <option value="MALE">MALE</option>
+                  <option value="FEMALE">FEMALE</option>
+                  <option value="OTHER">OTHER</option>
+                </select>
+              </label>
+              <label className="text-sm text-slate-500">
+                Trang thai
+                <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.status} onChange={(event) => setEditForm((form) => ({ ...form, status: event.target.value }))}>
+                  <option value="PENDING">PENDING</option>
+                  <option value="TRIAL">TRIAL</option>
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="HOLD">HOLD</option>
+                  <option value="ALUMNI">ALUMNI</option>
+                  <option value="DROPPED">DROPPED</option>
+                </select>
+              </label>
+              <StudentEditField label="Lop/Khoi" value={editForm.currentGrade} onChange={(value) => setEditForm((form) => ({ ...form, currentGrade: value }))} />
+              <StudentEditField label="Truong" value={editForm.school} onChange={(value) => setEditForm((form) => ({ ...form, school: value }))} />
+              <StudentEditField label="Muc tieu" value={editForm.aim} onChange={(value) => setEditForm((form) => ({ ...form, aim: value, target: value }))} />
+              <StudentEditField label="SDT hoc sinh" value={editForm.studentPhone} onChange={(value) => setEditForm((form) => ({ ...form, studentPhone: value }))} />
+              <label className="text-sm text-slate-500 md:col-span-2">
+                Dia chi
+                <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.address} onChange={(event) => setEditForm((form) => ({ ...form, address: event.target.value }))} />
+              </label>
+              <div className="border-t border-slate-100 pt-4 md:col-span-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Thong tin phu huynh chinh</p>
+              </div>
+              <StudentEditField label="Ho ten phu huynh" value={editForm.parentFullName} onChange={(value) => setEditForm((form) => ({ ...form, parentFullName: value }))} />
+              <StudentEditField label="SDT phu huynh" value={editForm.parentPhone} onChange={(value) => setEditForm((form) => ({ ...form, parentPhone: value }))} />
+              <StudentEditField label="Email phu huynh" value={editForm.parentEmail} onChange={(value) => setEditForm((form) => ({ ...form, parentEmail: value }))} />
+              <StudentEditField label="Quan he" value={editForm.parentRelationship} onChange={(value) => setEditForm((form) => ({ ...form, parentRelationship: value }))} />
+              <label className="text-sm text-slate-500 md:col-span-2">
+                Dia chi phu huynh
+                <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.parentAddress} onChange={(event) => setEditForm((form) => ({ ...form, parentAddress: event.target.value }))} />
+              </label>
+              <label className="text-sm text-slate-500 md:col-span-2">
+                Ghi chu
+                <textarea className="mt-1 min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.notes} onChange={(event) => setEditForm((form) => ({ ...form, notes: event.target.value }))} />
+              </label>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Huy</Button>
+              <Button type="submit" disabled={isSaving || !editForm.fullName}>{isSaving ? 'Dang luu...' : 'Luu thay doi'}</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {showExamModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl">
@@ -950,7 +1192,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
                   <label className="text-sm text-slate-500">Điểm đạt được</label>
                   <input
                     type="number"
-                    step="0.1"
+                    step="0.5"
                     className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                     value={examForm.score}
                     onChange={(event) => setExamForm((form) => ({ ...form, score: event.target.value }))}
@@ -960,7 +1202,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
                   <label className="text-sm text-slate-500">Mục tiêu</label>
                   <input
                     type="number"
-                    step="0.1"
+                    step="0.5"
                     className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                     value={examForm.targetScore}
                     onChange={(event) => setExamForm((form) => ({ ...form, targetScore: event.target.value }))}
@@ -1563,6 +1805,33 @@ function ChecklistLine({ label, value }: { label: string; value: string }) {
   );
 }
 
+function StudentEditField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="text-sm text-slate-500">
+      {label}
+      <input
+        type={type}
+        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+      />
+    </label>
+  );
+}
+
 function ExamChecklistCheckbox({
   label,
   checked,
@@ -1602,6 +1871,16 @@ const issueCategoryOptions = [
 
 function getIssueCategoryLabel(category: string) {
   return issueCategoryOptions.find((item) => item.value === category)?.label || category;
+}
+
+function getAcademicResultTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    PLACEMENT: 'Test đầu vào',
+    MOCK: 'Mock test',
+    MIDTERM: 'Giữa khóa',
+    FINAL: 'Cuối khóa',
+  };
+  return labels[type] || type;
 }
 
 function getIssuePriorityLabel(priority: string) {

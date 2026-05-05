@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/Input';
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [receivables, setReceivables] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -21,22 +22,25 @@ export default function PaymentsPage() {
   // Create Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [contractSearch, setContractSearch] = useState('');
   const [formData, setFormData] = useState({
     contractId: '',
     amount: '',
     method: 'TRANSFER',
-    notes: '',
+    notes: 'Đặt cọc',
   });
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [paymentsData, receivablesData] = await Promise.all([
+      const [paymentsData, receivablesData, contractsData] = await Promise.all([
         PaymentsClient.findAll(),
         PaymentsClient.getReceivables(),
+        PaymentsClient.getContracts(),
       ]);
       setPayments(paymentsData);
       setReceivables(receivablesData);
+      setContracts(contractsData);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch payment data');
     } finally {
@@ -67,8 +71,9 @@ export default function PaymentsPage() {
         contractId: '',
         amount: '',
         method: 'TRANSFER',
-        notes: '',
+        notes: 'Đặt cọc',
       });
+      setContractSearch('');
     } catch (err: any) {
       setError(err.message || 'Không thể ghi nhận thanh toán');
     } finally {
@@ -77,6 +82,51 @@ export default function PaymentsPage() {
   };
 
   const totalOutstanding = receivables.reduce((sum, r) => sum + Number(r.remainingAmount || r.amount), 0);
+  const accountingNoteOptions = [
+    'Đặt cọc',
+    'Hoàn thành học phí',
+    'Nộp phí test đầu vào',
+    'Nộp lệ phí thi thật',
+    'Nộp phí mock test',
+  ];
+  const contractOptions = contracts.map((contract) => {
+    const receivable = receivables.find((item) => item.contractId === contract.id);
+    const student = contract.student || {};
+    return {
+      id: contract.id,
+      amount: receivable ? String(receivable.remainingAmount || receivable.amount || '') : '',
+      receivable,
+      contract,
+      student,
+      label: `${contract.code || contract.id} - ${student.fullName || 'N/A'}`,
+      subLabel: [student.code, contract.productName, contract.productRank, contract.feePackage, contract.center?.name].filter(Boolean).join(' • '),
+      searchText: [contract.id, contract.code, student.fullName, student.code, contract.productName, contract.productRank, contract.feePackage, contract.center?.name].filter(Boolean).join(' ').toLowerCase(),
+    };
+  });
+  const filteredContractOptions = contractOptions
+    .filter((option) => !contractSearch.trim() || option.searchText.includes(contractSearch.trim().toLowerCase()))
+    .slice(0, 8);
+
+  const selectContract = (option: { id: string; amount: string; label: string }) => {
+    setFormData((current) => ({ ...current, contractId: option.id, amount: option.amount || '' }));
+    setContractSearch(option.label);
+  };
+  const selectedContractOption = contractOptions.find((option) => option.id === formData.contractId);
+  const handleContractInputChange = (value: string) => {
+    setContractSearch(value);
+    const normalizedValue = value.trim().toLowerCase();
+    const exactMatch = contractOptions.find((option) => {
+      const contractCode = String(option.contract?.code || '').toLowerCase();
+      return option.id.toLowerCase() === normalizedValue || contractCode === normalizedValue;
+    });
+
+    if (exactMatch) {
+      selectContract(exactMatch);
+      return;
+    }
+
+    setFormData((current) => ({ ...current, contractId: value }));
+  };
 
   return (
     <ModuleBoundary moduleCode="PAYMENT_RECEIVABLE">
@@ -175,6 +225,7 @@ export default function PaymentsPage() {
                     className="flex justify-between items-center p-3 rounded-xl border border-slate-50 hover:border-slate-100 transition-all cursor-pointer"
                     onClick={() => {
                         setFormData({...formData, contractId: r.contractId, amount: String(r.remainingAmount || r.amount)});
+                        setContractSearch(`${r.contract?.code || r.contractId} - ${r.contract?.student?.fullName || 'N/A'}`);
                         setIsModalOpen(true);
                     }}
                   >
@@ -210,13 +261,68 @@ export default function PaymentsPage() {
         >
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Hợp đồng (ID)</label>
-              <Input 
-                required
-                placeholder="Nhập hoặc chọn contractId..."
-                value={formData.contractId}
-                onChange={e => setFormData({...formData, contractId: e.target.value})}
-              />
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Hợp đồng</label>
+              <div className="relative">
+                <Input
+                  required
+                  placeholder="Tim theo ten hoc sinh, ma HD, ma HS, goi phi..."
+                  value={contractSearch || formData.contractId}
+                  onChange={e => handleContractInputChange(e.target.value)}
+                />
+                {contractSearch && filteredContractOptions.length > 0 && (
+                  <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                    {filteredContractOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50"
+                        onClick={() => selectContract(option)}
+                      >
+                        <div className="text-sm font-bold text-slate-800">{option.label}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">{option.subLabel}</div>
+                        <div className="mt-1 text-xs font-semibold text-red-500">
+                          Con no: {option.amount ? `${Number(option.amount).toLocaleString()} ₫` : 'Chua co goi y'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedContractOption && (
+                <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm md:grid-cols-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Hoc sinh</p>
+                    <p className="font-semibold text-slate-800">{selectedContractOption.student?.fullName || 'N/A'}</p>
+                    <p className="text-xs text-slate-500">{selectedContractOption.student?.code || ''}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Ma hop dong</p>
+                    <p className="font-mono font-semibold text-slate-800">{selectedContractOption.contract?.code || selectedContractOption.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Goi hoc</p>
+                    <p className="font-semibold text-slate-800">
+                      {[selectedContractOption.contract?.productName, selectedContractOption.contract?.productRank, selectedContractOption.contract?.feePackage].filter(Boolean).join(' - ') || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Con no</p>
+                    <p className="font-bold text-red-500">
+                      {selectedContractOption.amount ? `${Number(selectedContractOption.amount).toLocaleString()} ₫` : 'Chua co goi y'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Trung tam</p>
+                    <p className="font-semibold text-slate-800">{selectedContractOption.contract?.center?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Han thu</p>
+                    <p className="font-semibold text-slate-800">
+                      {selectedContractOption.receivable?.dueDate ? format(new Date(selectedContractOption.receivable.dueDate), 'dd/MM/yyyy') : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Số tiền thanh toán (VND)</label>
@@ -241,12 +347,16 @@ export default function PaymentsPage() {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ghi chú</label>
-              <Input 
-                placeholder="Lý do, mã tham chiếu..."
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nội dung</label>
+              <select
+                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-custom text-sm focus:ring-2 focus:ring-primary/20 outline-none"
                 value={formData.notes}
                 onChange={e => setFormData({...formData, notes: e.target.value})}
-              />
+              >
+                {accountingNoteOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
             </div>
           </form>
         </Modal>

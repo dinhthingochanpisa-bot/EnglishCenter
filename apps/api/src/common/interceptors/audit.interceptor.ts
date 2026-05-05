@@ -57,6 +57,7 @@ export class AuditInterceptor implements NestInterceptor {
     if (path.includes('/roles')) return 'Role';
     if (path.includes('/centers')) return 'Center';
     if (path.includes('/leads')) return 'Lead';
+    if (path.includes('/parents')) return 'Parent';
     if (path.includes('/families')) return 'Family';
     if (path.includes('/students')) return 'Student';
     if (path.includes('/products')) return 'Product';

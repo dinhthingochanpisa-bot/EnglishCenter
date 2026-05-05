@@ -77,6 +77,85 @@ export class LeadService {
     return lead;
   }
 
+  async update(id: string, data: any, user: any) {
+    const lead = await this.prisma.lead.findUnique({
+      where: { id },
+      include: { parent: true },
+    });
+    if (!lead) throw new NotFoundException('Lead not found');
+    CenterScope.validate(user, lead.centerId);
+
+    const parentData: any = {};
+    if (data.parentName !== undefined) parentData.fullName = data.parentName?.trim() || lead.parent.fullName;
+    if (data.phone !== undefined) parentData.phone = data.phone?.trim() || lead.parent.phone;
+    if (data.email !== undefined) parentData.email = data.email?.trim() || null;
+    if (data.address !== undefined) parentData.address = data.address?.trim() || null;
+
+    const leadData: any = {};
+    [
+      'prospectiveStudentName',
+      'studentPhone',
+      'productInterest',
+      'school',
+      'grade',
+      'target',
+      'aim',
+      'fatherName',
+      'fatherPhone',
+      'motherName',
+      'motherPhone',
+      'campaign',
+      'notes',
+    ].forEach((field) => {
+      if (data[field] !== undefined) {
+        leadData[field] = typeof data[field] === 'string' ? data[field].trim() || null : data[field];
+      }
+    });
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (Object.keys(parentData).length) {
+        await tx.parent.update({
+          where: { id: lead.parentId },
+          data: parentData,
+        });
+      }
+
+      return tx.lead.update({
+        where: { id },
+        data: leadData,
+        include: {
+          parent: true,
+          source: true,
+          owner: { select: { id: true, fullName: true, email: true } },
+          center: true,
+          opportunities: { include: { program: true }, orderBy: { updatedAt: 'desc' } },
+          interactions: {
+            include: { actor: { select: { fullName: true } } },
+            orderBy: { timestamp: 'desc' },
+          },
+          tasks: {
+            include: { assignee: { select: { fullName: true } } },
+            orderBy: { dueDate: 'asc' },
+          },
+        },
+      });
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: user.id || user.userId,
+        entityType: 'Lead',
+        entityId: id,
+        action: 'UPDATE_INFO',
+        beforeData: { lead, parent: lead.parent } as any,
+        afterData: { lead: leadData, parent: parentData } as any,
+        centerId: lead.centerId,
+      },
+    });
+
+    return updated;
+  }
+
   async checkDedupe(phone: string) {
     const normalized = PhoneUtility.normalize(phone);
     // Search globally across the company
