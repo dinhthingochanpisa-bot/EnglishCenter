@@ -89,8 +89,11 @@ docker compose --env-file .env.deploy -f docker-compose.deploy.yml logs -f web
 File data dump local duoc tao bang:
 
 ```powershell
-docker exec -e PGPASSWORD=password english-center-postgres pg_dump -U admin -d english_center_db --data-only --no-owner --no-privileges --exclude-table-data=_prisma_migrations > local-data-dump.sql
+docker exec -e PGPASSWORD=password english-center-postgres pg_dump -U admin -d english_center_db --data-only --no-owner --no-privileges --exclude-table-data=_prisma_migrations -f /tmp/local-data-dump.sql
+docker cp english-center-postgres:/tmp/local-data-dump.sql local-data-dump.sql
 ```
+
+Khong dung PowerShell redirect `>` de tao file dump vi co the lam sai encoding cua file SQL.
 
 Neu muon import thu cong thay vi de compose tu chay, tren server chay migration truoc:
 
