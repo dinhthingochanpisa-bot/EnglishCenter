@@ -16,7 +16,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_API_URL="http://localhost:8446"
+ARG NEXT_PUBLIC_API_URL="http://localhost:3100"
 ENV DATABASE_URL="postgresql://admin:password@localhost:5432/english_center_db?schema=public"
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 

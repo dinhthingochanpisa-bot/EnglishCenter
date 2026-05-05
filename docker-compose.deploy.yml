@@ -28,6 +28,9 @@ services:
 
   api-migrate:
     image: ${API_IMAGE:-english-center-api:latest}
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
     container_name: english-center-api-migrate
     command: ["npm", "run", "migrate:deploy", "--workspace=database"]
     environment:
@@ -59,6 +62,9 @@ services:
 
   api:
     image: ${API_IMAGE:-english-center-api:latest}
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
     container_name: english-center-api
     restart: unless-stopped
     ports:
@@ -84,6 +90,11 @@ services:
 
   web:
     image: ${WEB_IMAGE:-english-center-web:latest}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3100}
     container_name: english-center-web
     restart: unless-stopped
     ports:

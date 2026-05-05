@@ -1,50 +1,70 @@
-# Deploy bang Docker image file
+# Deploy tu Git tren server
 
-Huong dan nay dung cho server da cai Docker va Docker Compose plugin.
+Huong dan nay dung cho server da cai Docker, Docker Compose plugin va Git.
 
-## 1. Build image o may build
-
-Neu deploy tren IP/domain that, thay `SERVER_HOST` bang host cua server. Gia tri nay se duoc bake vao web image vi `NEXT_PUBLIC_API_URL` la bien public cua Next.js.
-
-```powershell
-$env:SERVER_HOST="localhost"
-docker build -f apps/api/Dockerfile -t english-center-api:latest .
-docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL="http://$env:SERVER_HOST:3100" -t english-center-web:latest .
-```
-
-## 2. Xuat image thanh file tar
-
-```powershell
-docker save -o english-center-api.tar english-center-api:latest
-docker save -o english-center-web.tar english-center-web:latest
-```
-
-Copy cac file sau len server:
-
-```text
-english-center-api.tar
-english-center-web.tar
-docker-compose.deploy.yml
-docker/postgres/import-local-data.sh
-local-data-dump.sql
-```
-
-Copy them `.env.deploy.example` len server va doi ten thanh `.env.deploy`, sau do sua password, JWT secret, `FRONTEND_URL`, `NEXT_PUBLIC_API_URL` theo IP/domain server.
-
-## 3. Load image tren server
+## 1. Lay code tren server
 
 ```bash
-docker load -i english-center-api.tar
-docker load -i english-center-web.tar
+git clone https://github.com/dinhthingochanpisa-bot/EnglishCenter.git
+cd EnglishCenter
 ```
 
-## 4. Chay he thong
+Neu server da clone repo:
 
 ```bash
-docker compose --env-file .env.deploy -f docker-compose.deploy.yml up -d
+cd EnglishCenter
+git pull
 ```
 
-Cong publish mac dinh:
+## 2. Tao file env
+
+```bash
+cp .env.deploy.example .env.deploy
+```
+
+Sua `.env.deploy` theo server. Với server hien tai:
+
+```env
+FRONTEND_URL=http://27.71.229.14:3002
+NEXT_PUBLIC_API_URL=http://27.71.229.14:3100
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=doi-mat-khau-db
+POSTGRES_DB=english_center_db
+JWT_SECRET=doi-jwt-secret
+JWT_REFRESH_SECRET=doi-refresh-secret
+COOKIE_SECURE=false
+COOKIE_SAME_SITE=lax
+UPLOAD_DIR=uploads/branding
+```
+
+`NEXT_PUBLIC_API_URL` se duoc bake vao web image khi build, nen moi lan doi IP/domain/API port can build lai web.
+
+## 3. Chuan bi data dump
+
+Repo co `local-data-dump.sql`. Neu can tao lai tu local, dung:
+
+```powershell
+docker exec -e PGPASSWORD=password english-center-postgres pg_dump -U admin -d english_center_db --data-only --no-owner --no-privileges --exclude-table-data=_prisma_migrations -f /tmp/local-data-dump.sql
+docker cp english-center-postgres:/tmp/local-data-dump.sql local-data-dump.sql
+```
+
+Khong dung PowerShell redirect `>` de tao file dump vi co the lam sai encoding cua file SQL.
+
+## 4. Build va chay tren server
+
+```bash
+docker compose --env-file .env.deploy -f docker-compose.deploy.yml up -d --build
+```
+
+Compose se tu dong:
+
+- build `english-center-api:latest` tu `apps/api/Dockerfile`
+- build `english-center-web:latest` tu `apps/web/Dockerfile`
+- chay `api-migrate` de migrate database
+- chay `db-seed` de import `local-data-dump.sql` neu database con trong
+- start API va Web
+
+Cong publish:
 
 ```text
 Web:      http://SERVER_HOST:3002
@@ -60,22 +80,7 @@ docker compose --env-file .env.deploy -f docker-compose.deploy.yml ps
 curl http://localhost:3100/health
 ```
 
-## 6. Migration va data tu dong khi compose moi
-
-`docker-compose.deploy.yml` co san 2 service init:
-
-- `api-migrate`: chay Prisma migration.
-- `db-seed`: import `local-data-dump.sql` neu database con trong.
-
-Khi chay:
-
-```bash
-docker compose --env-file .env.deploy -f docker-compose.deploy.yml up -d
-```
-
-API se cho migration va import data xong moi start.
-
-Xem log init khi can:
+Xem log khi can:
 
 ```bash
 docker compose --env-file .env.deploy -f docker-compose.deploy.yml logs api-migrate
@@ -84,26 +89,21 @@ docker compose --env-file .env.deploy -f docker-compose.deploy.yml logs -f api
 docker compose --env-file .env.deploy -f docker-compose.deploy.yml logs -f web
 ```
 
-## 7. Tao lai file data dump
+## 6. Reset database neu migration/import bi loi tren server moi
 
-File data dump local duoc tao bang:
+Chi dung lenh nay khi server chua co data can giu:
 
-```powershell
-docker exec -e PGPASSWORD=password english-center-postgres pg_dump -U admin -d english_center_db --data-only --no-owner --no-privileges --exclude-table-data=_prisma_migrations -f /tmp/local-data-dump.sql
-docker cp english-center-postgres:/tmp/local-data-dump.sql local-data-dump.sql
+```bash
+docker compose --env-file .env.deploy -f docker-compose.deploy.yml down -v
+docker compose --env-file .env.deploy -f docker-compose.deploy.yml up -d --build
 ```
 
-Khong dung PowerShell redirect `>` de tao file dump vi co the lam sai encoding cua file SQL.
+## 7. Import data thu cong
 
-Neu muon import thu cong thay vi de compose tu chay, tren server chay migration truoc:
+Neu muon import thu cong thay vi de compose tu chay:
 
 ```bash
 docker compose --env-file .env.deploy -f docker-compose.deploy.yml exec api npm run migrate:deploy --workspace=database
-```
-
-Sau do import data:
-
-```bash
 cat local-data-dump.sql | docker compose --env-file .env.deploy -f docker-compose.deploy.yml exec -T postgres sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
