@@ -4,7 +4,7 @@ services:
     container_name: english-center-postgres
     restart: unless-stopped
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
@@ -22,7 +22,7 @@ services:
     container_name: english-center-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_HOST_PORT:-6380}:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
 
@@ -62,7 +62,7 @@ services:
     container_name: english-center-api
     restart: unless-stopped
     ports:
-      - "${API_HOST_PORT:-3100}:3000"
+      - "3100:3000"
     environment:
       PORT: 3000
       DATABASE_URL: "postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-english_center_db}?schema=public"
@@ -87,7 +87,7 @@ services:
     container_name: english-center-web
     restart: unless-stopped
     ports:
-      - "${WEB_HOST_PORT:-3002}:3001"
+      - "3002:3001"
     environment:
       API_SERVER_URL: "http://api:3000"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3100}
