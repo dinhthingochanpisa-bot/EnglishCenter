@@ -64,7 +64,7 @@ phase*.md
 
 # Misc generated migration scratch files
 packages/database/prisma/migrations/*_temp.sql
-local-data-dump*.sql
+
 db-dumps/
 
 # Local docs folder
