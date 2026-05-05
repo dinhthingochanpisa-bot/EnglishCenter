@@ -51,9 +51,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: ${POSTGRES_DB:-english_center_db}
       DATA_DUMP_FILE: /docker-entrypoint-initdata/local-data-dump.sql
+      BRANDING_LOGO_FILE: /docker-entrypoint-initdata/branding-logo.png
+      BRANDING_LOGO_TARGET: /app/uploads/branding/logo-1777865698688-670336801.png
     volumes:
       - ./local-data-dump.sql:/docker-entrypoint-initdata/local-data-dump.sql:ro
+      - ./apps/api/uploads/branding/logo-eg.png:/docker-entrypoint-initdata/branding-logo.png:ro
       - ./docker/postgres/import-local-data.sh:/docker-entrypoint-initdata/import-local-data.sh:ro
+      - branding_data:/app/uploads
     command: ["sh", "/docker-entrypoint-initdata/import-local-data.sh"]
     depends_on:
       api-migrate:

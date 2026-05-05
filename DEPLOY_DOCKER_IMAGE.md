@@ -61,7 +61,7 @@ Compose se tu dong:
 - build `english-center-api:latest` tu `apps/api/Dockerfile`
 - build `english-center-web:latest` tu `apps/web/Dockerfile`
 - chay `api-migrate` de migrate database
-- chay `db-seed` de import `local-data-dump.sql` neu database con trong
+- chay `db-seed` de seed logo vao volume `branding_data` va import `local-data-dump.sql` neu database con trong
 - start API va Web
 
 Cong publish:
