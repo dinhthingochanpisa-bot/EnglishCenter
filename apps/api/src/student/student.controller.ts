@@ -144,6 +144,10 @@ export class StudentController {
       where: { id },
       include: {
         center: true,
+        attendance: {
+          where: { status: { in: ['PRESENT', 'LATE'] } },
+          select: { classId: true, date: true, status: true },
+        },
         relations: {
           include: { parent: true, family: true },
         },

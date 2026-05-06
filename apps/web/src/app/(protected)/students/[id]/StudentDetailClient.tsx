@@ -149,6 +149,63 @@ export default function StudentDetailClient({ id }: { id: string }) {
   const totalDebtAmount = studentContracts.reduce((sum: number, contract: any) => sum + getContractDebtAmount(contract), 0);
   const primaryRelation = student?.relations?.find((rel: any) => rel.isPrimaryContact) || student?.relations?.[0] || null;
 
+  const learningRoutes = React.useMemo(() => {
+    if (!student || !studentContracts || studentContracts.length === 0) return [];
+
+    const sorted = [...studentContracts].sort((a, b) =>
+      new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+    );
+
+    let totalAttended = student.attendance?.length || 0;
+    const routes: any[] = [];
+    let mainRouteCount = 0;
+
+    sorted.forEach(contract => {
+      const routeText = [
+        contract.code,
+        contract.contractType,
+        ...(contract.details || []).flatMap((detail: any) => [
+          detail.plan?.name,
+          detail.plan?.program?.name,
+          detail.plan?.program?.product?.name,
+        ]),
+      ]
+        .filter(Boolean)
+        .join(' ');
+      const refireStageMatch = routeText.match(/\bIT\s*\d+\b/i);
+      const isRefire = /refire|tái phí|gia hạn/i.test(routeText) || Boolean(refireStageMatch);
+
+      let routeName = '';
+      if (isRefire) {
+        routeName = refireStageMatch ? refireStageMatch[0].replace(/\s+/g, '').toUpperCase() : 'Giai đoạn Refire';
+      } else {
+        mainRouteCount++;
+        routeName = `Lộ trình ${mainRouteCount}`;
+      }
+
+      const sessionsInThisRoute = Number(contract.contractedSessions || contract.totalLearningSessions || 0) ||
+        contract.details?.reduce((acc: number, d: any) =>
+          acc + (Number(d.plan?.sessionCount || 0) * (d.quantity || 1)), 0) || 0;
+
+      const attendedInThisRoute = Math.min(totalAttended, sessionsInThisRoute);
+      totalAttended = Math.max(0, totalAttended - sessionsInThisRoute);
+
+      routes.push({
+        name: routeName,
+        isRefire,
+        contract,
+        totalSessions: sessionsInThisRoute,
+        sessionsStudied: attendedInThisRoute,
+        finalAmount: contract.finalAmount,
+        paidAmount: getContractPaidAmount(contract),
+        debtAmount: getContractDebtAmount(contract),
+        status: contract.status,
+      });
+    });
+
+    return routes;
+  }, [student, studentContracts]);
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -663,95 +720,115 @@ export default function StudentDetailClient({ id }: { id: string }) {
         {activeTab === 'contracts' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <CareSummaryCard icon={<FileText size={22} />} label="Tổng hợp đồng" value={`${studentContracts.length}`} tone="blue" />
-              <CareSummaryCard icon={<CheckCircle2 size={22} />} label="Đang hiệu lực" value={`${activeContractCount}`} tone={activeContractCount > 0 ? 'green' : 'slate'} />
-              <CareSummaryCard icon={<Trophy size={22} />} label="Giá trị HĐ" value={formatCurrency(totalContractValue)} tone="amber" />
+              <CareSummaryCard icon={<FileText size={22} />} label="Tổng lộ trình" value={`${learningRoutes.length}`} tone="blue" />
+              <CareSummaryCard icon={<CheckCircle2 size={22} />} label="Đang học" value={`${activeContractCount}`} tone={activeContractCount > 0 ? 'green' : 'slate'} />
+              <CareSummaryCard icon={<Trophy size={22} />} label="Tổng HP" value={formatCurrency(totalContractValue)} tone="amber" />
               <CareSummaryCard icon={<CheckCircle2 size={22} />} label="Đã thu" value={formatCurrency(totalPaidAmount)} tone="green" />
               <CareSummaryCard icon={<AlertCircle size={22} />} label="Còn nợ" value={formatCurrency(totalDebtAmount)} tone={totalDebtAmount > 0 ? 'rose' : 'green'} />
             </div>
 
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Hợp đồng của học sinh</h3>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Lộ trình học tập (Learning Routes)</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Dữ liệu này dùng cùng bảng Contract với trang quản lý hợp đồng và được tải từ hồ sơ học sinh.
+                  Phân tách theo các giai đoạn: Lộ trình chính và các giai đoạn Refire (IT). Tiến độ buổi học dựa trên điểm danh thực tế.
                 </p>
               </div>
-              <Link href="/academic/contracts">
-                <Button variant="secondary" className="gap-2">
-                  <FileText size={16} /> Mở quản lý hợp đồng
+              <div className="flex gap-2">
+                <Link href="/academic/contracts">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <FileText size={16} /> Quản lý HĐ
+                  </Button>
+                </Link>
+                <Button size="sm" className="gap-2" onClick={() => setShowRenewalModal(true)} disabled={!activeStudentContract}>
+                  <Plus size={16} /> Gia hạn / Tái ký
                 </Button>
-              </Link>
+              </div>
             </div>
 
-            {studentContracts.length === 0 ? (
+            {learningRoutes.length === 0 ? (
               <Card className="p-10 text-center text-slate-400">
                 <FileText size={48} className="mx-auto mb-4 opacity-20" />
-                <p className="text-sm">Chưa có hợp đồng nào được map với học sinh này.</p>
+                <p className="text-sm">Chưa có thông tin lộ trình học tập cho học sinh này.</p>
               </Card>
             ) : (
-              <div className="space-y-4">
-                {studentContracts.map((contract: any) => (
-                  <Card key={contract.id} className="p-6">
-                    <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-mono text-base font-black text-slate-900">{contract.code}</p>
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${getContractStatusClass(contract.status)}`}>
-                            {getContractStatusLabel(contract.status)}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm font-semibold text-slate-700">{getContractProductLabel(contract)}</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {contract.center?.name || student.center?.name || 'N/A'}
-                          {contract.salesperson?.fullName ? ` • TVV: ${contract.salesperson.fullName}` : ''}
-                        </p>
-                      </div>
-                      <div className="text-left md:text-right">
-                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Giá trị sau CK</p>
-                        <p className="text-xl font-black text-slate-900">{formatCurrency(contract.finalAmount)}</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Đã thu {formatCurrency(getContractPaidAmount(contract))} • Còn nợ {formatCurrency(getContractDebtAmount(contract))}
-                        </p>
-                      </div>
-                    </div>
+              <div className="grid grid-cols-1 gap-6">
+                {learningRoutes.map((route: any, index: number) => (
+                  <Card key={index} className={`p-0 overflow-hidden border-t-4 ${route.status === 'ACTIVE' ? 'border-t-primary shadow-md' : 'border-t-slate-300 opacity-80'}`}>
+                    <div className="p-6">
+                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                        <div className="flex-1 space-y-4">
+                          <div className="flex items-center gap-3">
+                            <h4 className="text-lg font-black text-slate-900">{route.name}</h4>
+                            <Badge variant={route.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                            {getContractStatusLabel(route.status)}
+                            </Badge>
+                            {route.isRefire && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700">Giai đoạn Refire</span>
+                            )}
+                          </div>
 
-                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-4">
-                      <ContractInfoItem label="Ngày bắt đầu" value={contract.startDate ? new Date(contract.startDate).toLocaleDateString('vi-VN') : 'N/A'} />
-                      <ContractInfoItem label="Ngày kết thúc" value={contract.endDate ? new Date(contract.endDate).toLocaleDateString('vi-VN') : 'N/A'} />
-                      <ContractInfoItem label="Loại hợp đồng" value={contract.contractType || 'N/A'} />
-                      <ContractInfoItem label="Số buổi" value={contract.contractedSessions || contract.totalLearningSessions || 'N/A'} />
-                    </div>
-
-                    {contract.details?.length > 0 && (
-                      <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4">
-                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Gói học</p>
-                        <div className="mt-3 space-y-2">
-                          {contract.details.map((detail: any) => (
-                            <div key={detail.id} className="flex flex-col gap-1 text-sm md:flex-row md:items-center md:justify-between">
-                              <span className="font-semibold text-slate-700">{detail.plan?.program?.name || detail.plan?.name || 'N/A'}{detail.plan?.name ? ` - ${detail.plan.name}` : ''}</span>
-                              <span className="text-slate-500">{detail.quantity || 1} x {formatCurrency(detail.unitPrice)} = {formatCurrency(detail.totalPrice)}</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="flex items-center gap-3 text-sm text-slate-600">
+                              <Calendar size={16} className="text-slate-400" />
+                              <span>{new Date(route.contract.startDate).toLocaleDateString('vi-VN')} - {new Date(route.contract.endDate).toLocaleDateString('vi-VN')}</span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {contract.paymentSchedule?.length > 0 && (
-                      <div className="mt-5 rounded-xl border border-slate-100 p-4">
-                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Lịch thanh toán</p>
-                        <div className="mt-3 divide-y divide-slate-100">
-                          {contract.paymentSchedule.map((schedule: any) => (
-                            <div key={schedule.id} className="grid grid-cols-1 gap-2 py-3 text-sm md:grid-cols-4">
-                              <span className="font-medium text-slate-700">{schedule.dueDate ? new Date(schedule.dueDate).toLocaleDateString('vi-VN') : 'N/A'}</span>
-                              <span className="text-slate-500">Phải thu: {formatCurrency(schedule.amount)}</span>
-                              <span className="text-slate-500">Đã thu: {formatCurrency(schedule.paidAmount)}</span>
-                              <span className="font-semibold text-slate-700">{getPaymentScheduleStatusLabel(schedule.status)} • còn {formatCurrency(schedule.remainingAmount)}</span>
+                            <div className="flex items-center gap-3 text-sm text-slate-600">
+                              <GraduationCap size={16} className="text-slate-400" />
+                              <span className="font-medium">{getContractProductLabel(route.contract)}</span>
                             </div>
-                          ))}
+                          </div>
+
+                          <div className="pt-2">
+                            <ProgressBar
+                              current={route.sessionsStudied}
+                              total={route.totalSessions}
+                              color={route.status === 'ACTIVE' ? 'blue' : 'slate'}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="w-full md:w-64 p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
+                          <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest text-slate-400">
+                            <span>Tình trạng học phí</span>
+                            <span className="font-mono">{route.contract.code}</span>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-slate-500">Tổng cộng:</span>
+                              <span className="font-bold text-slate-900">{formatCurrency(route.finalAmount)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm text-emerald-600">
+                              <span>Đã thu:</span>
+                              <span className="font-bold">{formatCurrency(route.paidAmount)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm border-t border-slate-200 pt-1">
+                              <span className="text-slate-500 font-medium">Còn nợ:</span>
+                              <span className={`font-black ${route.debtAmount > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+                                {formatCurrency(route.debtAmount)}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    )}
+
+                      {route.contract.details?.length > 0 && (
+                        <div className="mt-6 pt-6 border-t border-slate-100">
+                          <div className="space-y-3">
+                            {route.contract.details.map((detail: any) => (
+                              <div key={detail.id} className="flex justify-between items-center text-sm text-slate-600 bg-white/50 p-2 rounded-lg border border-slate-100/50">
+                                <span className="font-medium text-slate-700">
+                                  {detail.plan?.program?.name || detail.plan?.name} - {detail.plan?.name}
+                                </span>
+                                <span className="text-xs">
+                                  {detail.quantity} x {formatCurrency(detail.unitPrice)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </Card>
                 ))}
               </div>
@@ -1646,6 +1723,32 @@ export default function StudentDetailClient({ id }: { id: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProgressBar({ current, total, color = 'blue' }: { current: number; total: number; color?: 'blue' | 'green' | 'amber' | 'rose' | 'slate' }) {
+  const percentage = total > 0 ? Math.min(Math.round((current / total) * 100), 100) : 0;
+  const colors = {
+    blue: 'bg-blue-500',
+    green: 'bg-emerald-500',
+    amber: 'bg-amber-500',
+    rose: 'bg-rose-500',
+    slate: 'bg-slate-400',
+  };
+
+  return (
+    <div className="w-full">
+      <div className="flex justify-between items-center mb-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
+        <span>Tiến độ học: {current}/{total} buổi</span>
+        <span className="text-slate-600">{percentage}%</span>
+      </div>
+      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
+        <div
+          className={`h-full transition-all duration-700 ease-out ${colors[color] || colors.blue}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
     </div>
   );
 }
