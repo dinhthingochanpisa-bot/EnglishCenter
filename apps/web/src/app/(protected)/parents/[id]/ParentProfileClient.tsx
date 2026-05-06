@@ -1,38 +1,46 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { apiFetch } from '@/lib/api';
-import { 
-  User, 
-  Phone, 
-  Mail, 
-  MapPin, 
-  MessageSquare, 
+import React, { useEffect, useState } from "react";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { apiFetch } from "@/lib/api";
+import {
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  MessageSquare,
   ChevronLeft,
   CircleUser,
   GraduationCap,
   History,
   Pencil,
-  X
-} from 'lucide-react';
-import Link from 'next/link';
-import { ModuleBoundary } from '@/components/common/ModuleBoundary';
-import { AuditTrail } from '@/components/common/AuditTrail';
+  X,
+  FileText,
+  Save,
+  Loader2,
+} from "lucide-react";
+import Link from "next/link";
+import { ModuleBoundary } from "@/components/common/ModuleBoundary";
+import { AuditTrail } from "@/components/common/AuditTrail";
+import { useAppDialog } from "@/providers/AppDialogProvider";
 
 export default function ParentProfileClient({ id }: { id: string }) {
+  const { notify } = useAppDialog();
   const [parent, setParent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
   const [editForm, setEditForm] = useState({
-    fullName: '',
-    phone: '',
-    email: '',
-    address: '',
-    preferredCommunicationChannel: '',
+    fullName: "",
+    phone: "",
+    email: "",
+    address: "",
+    preferredCommunicationChannel: "",
+    careNotes: "",
   });
 
   const fetchParent = async () => {
@@ -53,11 +61,12 @@ export default function ParentProfileClient({ id }: { id: string }) {
 
   const openEditModal = () => {
     setEditForm({
-      fullName: parent.fullName || '',
-      phone: parent.phone || '',
-      email: parent.email || '',
-      address: parent.address || '',
-      preferredCommunicationChannel: parent.preferredCommunicationChannel || '',
+      fullName: parent.fullName || "",
+      phone: parent.phone || "",
+      email: parent.email || "",
+      address: parent.address || "",
+      preferredCommunicationChannel: parent.preferredCommunicationChannel || "",
+      careNotes: parent.careNotes || "",
     });
     setShowEditModal(true);
   };
@@ -67,31 +76,87 @@ export default function ParentProfileClient({ id }: { id: string }) {
     setIsSaving(true);
     try {
       await apiFetch(`/parents/${id}`, {
-        method: 'PATCH',
+        method: "PATCH",
         body: JSON.stringify(editForm),
       });
       setShowEditModal(false);
       await fetchParent();
+      notify({
+        type: "success",
+        title: "Cập nhật thành công",
+        message: "Thông tin phụ huynh đã được lưu.",
+      });
+    } catch (err: any) {
+      notify({ type: "error", title: "Lỗi cập nhật", message: err.message });
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (loading) return <div className="p-8 animate-pulse text-slate-400">Đang tải hồ sơ phụ huynh...</div>;
-  if (!parent) return <div className="p-8 text-center text-slate-500">Không tìm thấy phụ huynh.</div>;
+  const startEditingNotes = () => {
+    setNotesDraft(parent.careNotes || "");
+    setIsEditingNotes(true);
+  };
+
+  const saveNotes = async () => {
+    setIsSaving(true);
+    try {
+      await apiFetch(`/parents/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ careNotes: notesDraft }),
+      });
+      setIsEditingNotes(false);
+      await fetchParent();
+      notify({
+        type: "success",
+        title: "Đã lưu ghi chú",
+        message: "Thông tin lưu ý chăm sóc đã được cập nhật.",
+      });
+    } catch (err: any) {
+      notify({
+        type: "error",
+        title: "Không thể lưu ghi chú",
+        message: err.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (loading)
+    return (
+      <div className="p-8 animate-pulse text-slate-400">
+        Đang tải hồ sơ phụ huynh...
+      </div>
+    );
+  if (!parent)
+    return (
+      <div className="p-8 text-center text-slate-500">
+        Không tìm thấy phụ huynh.
+      </div>
+    );
 
   return (
     <ModuleBoundary moduleCode="FAMILY_PARENT">
       <div className="space-y-6 max-w-5xl mx-auto">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => window.history.back()}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => window.history.back()}
+          >
             <ChevronLeft size={20} /> Quay lại
           </Button>
           <h1 className="text-2xl font-bold text-slate-900">Hồ sơ phụ huynh</h1>
         </div>
 
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" className="gap-2" onClick={openEditModal}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={openEditModal}
+          >
             <Pencil size={16} /> Chỉnh sửa
           </Button>
         </div>
@@ -103,7 +168,9 @@ export default function ParentProfileClient({ id }: { id: string }) {
               <CircleUser size={64} strokeWidth={1.5} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-slate-900">{parent.fullName}</h2>
+              <h2 className="text-xl font-bold text-slate-900">
+                {parent.fullName}
+              </h2>
               <p className="text-sm text-slate-500">Người giám hộ / liên hệ</p>
             </div>
             <div className="w-full pt-4 space-y-3 text-left">
@@ -126,7 +193,8 @@ export default function ParentProfileClient({ id }: { id: string }) {
             </div>
             <div className="w-full pt-4 border-t border-slate-100 flex flex-wrap gap-2">
               <Badge variant="outline" className="gap-1">
-                <MessageSquare size={12} /> {parent.preferredCommunicationChannel || 'Chưa thiết lập'}
+                <MessageSquare size={12} />{" "}
+                {parent.preferredCommunicationChannel || "Chưa thiết lập"}
               </Badge>
             </div>
           </Card>
@@ -136,26 +204,44 @@ export default function ParentProfileClient({ id }: { id: string }) {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                  <GraduationCap size={20} className="text-blue-600" /> Học sinh liên kết
+                  <GraduationCap size={20} className="text-blue-600" /> Học sinh
+                  liên kết
                 </h3>
               </div>
               <div className="space-y-4">
                 {parent.relations.map((rel: any) => (
-                  <div key={rel.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <div
+                    key={rel.id}
+                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100"
+                  >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-white rounded-full border flex items-center justify-center text-xs font-bold text-slate-400">
                         {rel.student.fullName.charAt(0)}
                       </div>
                       <div>
-                        <Link href={`/students/${rel.student.id}`} className="text-sm font-bold text-slate-900 hover:text-blue-600">
+                        <Link
+                          href={`/students/${rel.student.id}`}
+                          className="text-sm font-bold text-slate-900 hover:text-blue-600"
+                        >
                           {rel.student.fullName}
                         </Link>
-                        <p className="text-[10px] text-slate-500 uppercase tracking-wider">{rel.student.center.name}</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                          {rel.student.center.name}
+                        </p>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Badge variant="secondary" className="text-[10px]">{rel.relationship}</Badge>
-                      {rel.isPrimaryPayer && <Badge variant="outline" className="text-emerald-600 border-emerald-100 bg-emerald-50 text-[10px]">Người thanh toán</Badge>}
+                      <Badge variant="secondary" className="text-[10px]">
+                        {rel.relationship}
+                      </Badge>
+                      {rel.isPrimaryPayer && (
+                        <Badge
+                          variant="outline"
+                          className="text-emerald-600 border-emerald-100 bg-emerald-50 text-[10px]"
+                        >
+                          Người thanh toán
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -163,8 +249,74 @@ export default function ParentProfileClient({ id }: { id: string }) {
             </Card>
 
             <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  <FileText size={20} className="text-amber-500" /> Ghi chú phụ
+                  huynh
+                </h3>
+                {!isEditingNotes && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-blue-600 hover:text-blue-700"
+                    onClick={startEditingNotes}
+                  >
+                    <Pencil size={14} className="mr-1" /> Chỉnh sửa
+                  </Button>
+                )}
+              </div>
+
+              {isEditingNotes ? (
+                <div className="space-y-4">
+                  <textarea
+                    autoFocus
+                    className="w-full min-h-[120px] p-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                    placeholder="Nhập tính cách, thói quen trao đổi, lưu ý chăm sóc..."
+                    value={notesDraft}
+                    onChange={(e) => setNotesDraft(e.target.value)}
+                    maxLength={2000}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditingNotes(false)}
+                      disabled={isSaving}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={saveNotes}
+                      disabled={isSaving}
+                      className="gap-2"
+                    >
+                      {isSaving ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Save size={14} />
+                      )}
+                      Lưu ghi chú
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                  {parent.careNotes ? (
+                    parent.careNotes
+                  ) : (
+                    <p className="text-slate-400 italic py-4">
+                      Chưa có ghi chú cho phụ huynh này.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Card>
+
+            <Card className="p-6">
               <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
-                <History size={20} className="text-slate-400" /> Hoạt động gần đây
+                <History size={20} className="text-slate-400" /> Hoạt động gần
+                đây
               </h3>
               <div className="py-8 text-center text-slate-400 text-sm">
                 Chưa có nhật ký hoạt động cho hồ sơ này.
@@ -175,26 +327,81 @@ export default function ParentProfileClient({ id }: { id: string }) {
         </div>
         {showEditModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-            <form onSubmit={handleUpdateParent} className="w-full max-w-xl rounded-xl bg-white shadow-xl">
+            <form
+              onSubmit={handleUpdateParent}
+              className="w-full max-w-xl rounded-xl bg-white shadow-xl"
+            >
               <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                <h3 className="font-semibold text-slate-900">Chỉnh sửa thông tin phụ huynh</h3>
-                <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-700">
+                <h3 className="font-semibold text-slate-900">
+                  Chỉnh sửa thông tin phụ huynh
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="text-slate-400 hover:text-slate-700"
+                >
                   <X size={20} />
                 </button>
               </div>
               <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-                <ParentEditField label="Họ tên" value={editForm.fullName} onChange={(value) => setEditForm((form) => ({ ...form, fullName: value }))} required />
-                <ParentEditField label="SDT" value={editForm.phone} onChange={(value) => setEditForm((form) => ({ ...form, phone: value }))} required />
-                <ParentEditField label="Email" value={editForm.email} onChange={(value) => setEditForm((form) => ({ ...form, email: value }))} />
-                <ParentEditField label="Kênh liên hệ" value={editForm.preferredCommunicationChannel} onChange={(value) => setEditForm((form) => ({ ...form, preferredCommunicationChannel: value }))} />
+                <ParentEditField
+                  label="Họ tên"
+                  value={editForm.fullName}
+                  onChange={(value) =>
+                    setEditForm((form) => ({ ...form, fullName: value }))
+                  }
+                  required
+                />
+                <ParentEditField
+                  label="SDT"
+                  value={editForm.phone}
+                  onChange={(value) =>
+                    setEditForm((form) => ({ ...form, phone: value }))
+                  }
+                  required
+                />
+                <ParentEditField
+                  label="Email"
+                  value={editForm.email}
+                  onChange={(value) =>
+                    setEditForm((form) => ({ ...form, email: value }))
+                  }
+                />
+                <ParentEditField
+                  label="Kênh liên hệ"
+                  value={editForm.preferredCommunicationChannel}
+                  onChange={(value) =>
+                    setEditForm((form) => ({
+                      ...form,
+                      preferredCommunicationChannel: value,
+                    }))
+                  }
+                />
                 <label className="text-sm text-slate-500 md:col-span-2">
                   Địa chỉ
-                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={editForm.address} onChange={(event) => setEditForm((form) => ({ ...form, address: event.target.value }))} />
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={editForm.address}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+                        address: event.target.value,
+                      }))
+                    }
+                  />
                 </label>
               </div>
               <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-                <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Hủy</Button>
-                <Button type="submit" disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu thông tin'}</Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditModal(false)}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving ? "Đang lưu..." : "Lưu thông tin"}
+                </Button>
               </div>
             </form>
           </div>
@@ -204,11 +411,26 @@ export default function ParentProfileClient({ id }: { id: string }) {
   );
 }
 
-function ParentEditField({ label, value, onChange, required }: { label: string; value: string; onChange: (value: string) => void; required?: boolean }) {
+function ParentEditField({
+  label,
+  value,
+  onChange,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
   return (
     <label className="text-sm text-slate-500">
       {label}
-      <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={value} onChange={(event) => onChange(event.target.value)} required={required} />
+      <input
+        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+      />
     </label>
   );
 }

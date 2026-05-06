@@ -192,6 +192,7 @@ model Parent {
   email     String?
   address   String?
   preferredCommunicationChannel String? // e.g. ZALO, SMS, EMAIL, PHONE
+  careNotes String?
   relations ParentStudentRelation[]
   leads     Lead[]
   customerIssues CustomerIssue[]
