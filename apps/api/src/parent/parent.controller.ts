@@ -14,8 +14,12 @@ export class ParentController {
 
   @Get()
   @Permissions('FAMILY_PARENT.VIEW')
-  async findAll(@Request() req: any, @Query('search') search?: string) {
-    return this.parentService.findAll(req.user, search);
+  async findAll(
+    @Request() req: any,
+    @Query('search') search?: string,
+    @Query('centerId') centerId?: string,
+  ) {
+    return this.parentService.findAll(req.user, search, centerId);
   }
 
   @Get(':id')

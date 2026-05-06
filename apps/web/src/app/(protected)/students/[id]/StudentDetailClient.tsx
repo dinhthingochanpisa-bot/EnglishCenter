@@ -72,6 +72,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
     school: '',
     target: '',
     aim: '',
+    expectedExamTime: '',
     studentPhone: '',
     address: '',
     notes: '',
@@ -187,6 +188,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
       school: student.school || '',
       target: student.target || '',
       aim: student.aim || '',
+      expectedExamTime: student.expectedExamTime || '',
       studentPhone: student.studentPhone || '',
       address: student.address || '',
       notes: student.notes || '',
@@ -566,6 +568,11 @@ export default function StudentDetailClient({ id }: { id: string }) {
                     <Trophy size={16} className="text-slate-400" />
                     <span className="text-slate-500 w-24">Mục tiêu:</span>
                     <span className="font-medium text-slate-700">{student.aim || student.target || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <Calendar size={16} className="text-slate-400" />
+                    <span className="text-slate-500 w-24">Tháng thi:</span>
+                    <span className="font-medium text-slate-700">{student.expectedExamTime || student.examMonth || 'N/A'}</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <Phone size={16} className="text-slate-400" />
@@ -1130,6 +1137,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
               <StudentEditField label="Lớp/Khối" value={editForm.currentGrade} onChange={(value) => setEditForm((form) => ({ ...form, currentGrade: value }))} />
               <StudentEditField label="Trường" value={editForm.school} onChange={(value) => setEditForm((form) => ({ ...form, school: value }))} />
               <StudentEditField label="Mục tiêu" value={editForm.aim} onChange={(value) => setEditForm((form) => ({ ...form, aim: value, target: value }))} />
+              <StudentEditField label="Tháng thi dự kiến" value={editForm.expectedExamTime} onChange={(value) => setEditForm((form) => ({ ...form, expectedExamTime: value }))} />
               <StudentEditField label="SĐT học sinh" value={editForm.studentPhone} onChange={(value) => setEditForm((form) => ({ ...form, studentPhone: value }))} />
               <label className="text-sm text-slate-500 md:col-span-2">
                 Địa chỉ

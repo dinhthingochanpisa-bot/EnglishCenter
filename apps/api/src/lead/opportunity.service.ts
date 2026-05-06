@@ -481,6 +481,24 @@ export class OpportunityService {
         gender: studentPayload.gender || 'OTHER',
         centerId: opp.lead.centerId,
         target: studentPayload.target?.trim() || opp.lead.target || null,
+        studentPhone: studentPayload.studentPhone?.trim() || opp.lead.studentPhone || null,
+        school: studentPayload.school?.trim() || opp.lead.school || null,
+        currentGrade: studentPayload.currentGrade?.trim() || studentPayload.grade?.trim() || opp.lead.grade || null,
+        address: studentPayload.address?.trim() || opp.lead.address || parent.address || null,
+        fatherName: studentPayload.fatherName?.trim() || opp.lead.fatherName || null,
+        fatherPhone: studentPayload.fatherPhone?.trim() || opp.lead.fatherPhone || null,
+        motherName: studentPayload.motherName?.trim() || opp.lead.motherName || null,
+        motherPhone: studentPayload.motherPhone?.trim() || opp.lead.motherPhone || null,
+        aim: studentPayload.aim?.trim() || opp.lead.aim || opp.lead.target || null,
+        expectedExamTime: studentPayload.expectedExamTime?.trim() || opp.lead.expectedExamTime || null,
+        productName: studentPayload.productName?.trim() || opp.lead.productInterest || null,
+        placementTestDate: opp.lead.testDate || null,
+        placementListening: opp.lead.scoreListening || null,
+        placementReading: opp.lead.scoreReading || null,
+        placementWriting: opp.lead.scoreWriting || null,
+        placementSpeaking: opp.lead.scoreSpeaking || null,
+        placementOverall: opp.lead.scoreOverall || null,
+        scoreReportUrl: opp.lead.scoreReportUrl || null,
         notes: studentPayload.notes?.trim() || null,
         status: StudentStatus.PENDING,
       };
@@ -505,6 +523,7 @@ export class OpportunityService {
         familyId,
         { isPrimaryContact: true, isPrimaryPayer: true },
       );
+      await this.upsertLeadFamilyRelations(tx, student.id, opp.lead, familyId);
 
       const lead = await tx.lead.update({
         where: { id: opp.leadId },
@@ -563,7 +582,7 @@ export class OpportunityService {
       where: {
         parentId,
         student: {
-          centerId: opp.lead.centerId,
+          centerId: studentPayload.centerId || opp.lead.centerId,
           fullName: { equals: studentName, mode: 'insensitive' },
         },
       },
@@ -595,6 +614,26 @@ export class OpportunityService {
       gender: studentPayload.gender || undefined,
       centerId: studentPayload.centerId || opp.lead.centerId,
       target: studentPayload.target?.trim() || opp.lead.target || undefined,
+      studentPhone: studentPayload.studentPhone?.trim() || opp.lead.studentPhone || undefined,
+      school: studentPayload.school?.trim() || opp.lead.school || undefined,
+      currentGrade: studentPayload.currentGrade?.trim() || studentPayload.grade?.trim() || opp.lead.grade || undefined,
+      address: studentPayload.address?.trim() || opp.lead.address || opp.lead.parent?.address || undefined,
+      fatherName: studentPayload.fatherName?.trim() || opp.lead.fatherName || undefined,
+      fatherPhone: studentPayload.fatherPhone?.trim() || opp.lead.fatherPhone || undefined,
+      motherName: studentPayload.motherName?.trim() || opp.lead.motherName || undefined,
+      motherPhone: studentPayload.motherPhone?.trim() || opp.lead.motherPhone || undefined,
+      aim: studentPayload.aim?.trim() || opp.lead.aim || opp.lead.target || undefined,
+      expectedExamTime: studentPayload.expectedExamTime?.trim() || opp.lead.expectedExamTime || undefined,
+      productName: studentPayload.productName?.trim() || opp.lead.productInterest || undefined,
+      productRank: studentPayload.productRank?.trim() || undefined,
+      feePackage: studentPayload.feePackage?.trim() || undefined,
+      placementTestDate: opp.lead.testDate || undefined,
+      placementListening: opp.lead.scoreListening || undefined,
+      placementReading: opp.lead.scoreReading || undefined,
+      placementWriting: opp.lead.scoreWriting || undefined,
+      placementSpeaking: opp.lead.scoreSpeaking || undefined,
+      placementOverall: opp.lead.scoreOverall || undefined,
+      scoreReportUrl: opp.lead.scoreReportUrl || undefined,
       notes: studentPayload.notes?.trim() || undefined,
       status,
     };
@@ -608,6 +647,7 @@ export class OpportunityService {
         isPrimaryContact: true,
         isPrimaryPayer: true,
       });
+      await this.upsertLeadFamilyRelations(tx, student.id, opp.lead, familyId);
       return student;
     }
 
@@ -621,7 +661,47 @@ export class OpportunityService {
       isPrimaryContact: true,
       isPrimaryPayer: true,
     });
+    await this.upsertLeadFamilyRelations(tx, student.id, opp.lead, familyId);
     return student;
+  }
+
+  private async upsertLeadFamilyRelations(
+    tx: any,
+    studentId: string,
+    lead: any,
+    familyId?: string | null,
+  ) {
+    const relationInputs = [
+      {
+        fullName: lead.fatherName,
+        phone: lead.fatherPhone,
+        relationship: 'B\u1ed1',
+      },
+      {
+        fullName: lead.motherName,
+        phone: lead.motherPhone,
+        relationship: 'M\u1eb9',
+      },
+    ].filter((item) => item.fullName?.trim() && item.phone?.trim());
+
+    for (const item of relationInputs) {
+      const parent = await tx.parent.upsert({
+        where: { phone: item.phone.trim() },
+        update: { fullName: item.fullName.trim() },
+        create: {
+          fullName: item.fullName.trim(),
+          phone: item.phone.trim(),
+        },
+      });
+      await this.upsertSingleParentRelation(
+        tx,
+        studentId,
+        parent.id,
+        item.relationship,
+        familyId,
+        { isPrimaryContact: false, isPrimaryPayer: false },
+      );
+    }
   }
 
   private normalizeParentRelationship(value?: string | null) {
@@ -908,7 +988,13 @@ export class OpportunityService {
       const student = await this.ensureStudentFromOpportunity(
         tx,
         opp,
-        { fullName: payload.studentName, centerId: targetCenterId },
+        {
+          fullName: payload.studentName,
+          centerId: targetCenterId,
+          productName: payload.productName,
+          productRank: payload.productRank,
+          feePackage: payload.feePackage,
+        },
         waitForClass ? StudentStatus.PENDING : StudentStatus.ACTIVE,
       );
       await this.syncLatestPlacementResult(tx, opp.leadId, student.id);

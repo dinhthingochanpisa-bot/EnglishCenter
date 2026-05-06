@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/providers/AuthProvider';
+import { CenterScopeProvider } from '@/providers/CenterScopeProvider';
 
 export default function ProtectedLayout({
   children,
@@ -31,5 +32,9 @@ export default function ProtectedLayout({
     return null;
   }
 
-  return <AppLayout>{children}</AppLayout>;
+  return (
+    <CenterScopeProvider>
+      <AppLayout>{children}</AppLayout>
+    </CenterScopeProvider>
+  );
 }

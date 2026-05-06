@@ -6,6 +6,7 @@ import {
   Param,
   UseGuards,
   Request,
+  Query,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/auth.guards';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard';
@@ -24,8 +25,8 @@ export class PaymentController {
 
   @Get()
   @Permissions('PAYMENT_RECEIVABLE.VIEW')
-  async findAll(@Request() req: any) {
-    const where = CenterScope.filter(req.user);
+  async findAll(@Request() req: any, @Query('centerId') centerId?: string) {
+    const where = CenterScope.filter(req.user, 'centerId', centerId);
     return this.paymentService.findAll(where);
   }
 
@@ -38,18 +39,21 @@ export class PaymentController {
 
   @Get('contracts')
   @Permissions('PAYMENT_RECEIVABLE.VIEW')
-  async getContracts(@Request() req: any) {
-    const where = CenterScope.filter(req.user);
+  async getContracts(@Request() req: any, @Query('centerId') centerId?: string) {
+    const where = CenterScope.filter(req.user, 'centerId', centerId);
     return this.paymentService.getContracts(where);
   }
 
   @Get('receivables')
   @Permissions('PAYMENT_RECEIVABLE.VIEW')
-  async getReceivables(@Request() req: any) {
+  async getReceivables(@Request() req: any, @Query('centerId') centerId?: string) {
     // Fix: CenterScope.filter with 'contract.centerId' doesn't work for nested relations in Prisma
     // We must manually construct the nested filter
     let where: any = {};
-    if (req.user.role !== 'SUPER_ADMIN') {
+    if (centerId && centerId !== 'all') {
+      CenterScope.validate(req.user, centerId);
+      where = { contract: { centerId } };
+    } else if (req.user.role !== 'SUPER_ADMIN') {
       where = {
         contract: {
           centerId: { in: req.user.allowedCenterIds || [] }

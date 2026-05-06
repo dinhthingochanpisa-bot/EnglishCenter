@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Body, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, Request, UseGuards, Query } from '@nestjs/common';
 import { CrmService } from './crm.service';
 import { OpportunityService } from './opportunity.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guards';
@@ -20,8 +20,8 @@ export class CrmController {
   @Get('pipeline')
   @RequireModule('SALES_PIPELINE')
   @Permissions('CRM_LEADS.VIEW')
-  async getPipeline(@Request() req: any) {
-    return this.crmService.getPipeline(req.user);
+  async getPipeline(@Request() req: any, @Query('centerId') centerId?: string) {
+    return this.crmService.getPipeline(req.user, centerId);
   }
 
   @Patch('opportunities/:id/status')

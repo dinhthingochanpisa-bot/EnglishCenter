@@ -27,8 +27,8 @@ export class LeadController {
 
   @Get()
   @Permissions('CRM_LEADS.VIEW')
-  async findAll(@Request() req: any) {
-    return this.leadService.findAll(req.user);
+  async findAll(@Request() req: any, @Query('centerId') centerId?: string) {
+    return this.leadService.findAll(req.user, centerId);
   }
 
   @Get('check-dedupe')

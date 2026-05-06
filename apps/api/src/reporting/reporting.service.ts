@@ -6,9 +6,9 @@ import { CenterScope } from '../common/utils/center-scope.utils';
 export class ReportingService {
   constructor(private prisma: PrismaService) {}
 
-  async getExecutiveDashboard(user: any) {
-    const where = this.getExecutiveScope(user);
-    const centerWhere = this.getExecutiveScope(user, 'id');
+  async getExecutiveDashboard(user: any, centerId?: string) {
+    const where = this.getExecutiveScope(user, 'centerId', centerId);
+    const centerWhere = this.getExecutiveScope(user, 'id', centerId);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -218,7 +218,11 @@ export class ReportingService {
     };
   }
 
-  private getExecutiveScope(user: any, centerIdField: string = 'centerId') {
+  private getExecutiveScope(user: any, centerIdField: string = 'centerId', centerId?: string) {
+    if (centerId && centerId !== 'all') {
+      return CenterScope.filter(user, centerIdField, centerId);
+    }
+
     const permissions = user.permissions || [];
     const canViewSystemReport =
       user.role === 'SUPER_ADMIN' ||
@@ -380,8 +384,8 @@ export class ReportingService {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  async getSalesDashboard(user: any) {
-    const where = CenterScope.filter(user);
+  async getSalesDashboard(user: any, centerId?: string) {
+    const where = CenterScope.filter(user, 'centerId', centerId);
     const myLeadsWhere = {
       ...where,
       ownerId: user.userId,
@@ -435,8 +439,8 @@ export class ReportingService {
     };
   }
 
-  async getAcademicDashboard(user: any) {
-    const where = CenterScope.filter(user);
+  async getAcademicDashboard(user: any, centerId?: string) {
+    const where = CenterScope.filter(user, 'centerId', centerId);
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
 
@@ -482,8 +486,8 @@ export class ReportingService {
     };
   }
 
-  async getFamilyInsights(user: any) {
-    const where = CenterScope.filter(user);
+  async getFamilyInsights(user: any, centerId?: string) {
+    const where = CenterScope.filter(user, 'centerId', centerId);
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 86400000);
 
@@ -561,8 +565,8 @@ export class ReportingService {
     };
   }
 
-  async getNotifications(user: any) {
-    const where = CenterScope.filter(user);
+  async getNotifications(user: any, centerId?: string) {
+    const where = CenterScope.filter(user, 'centerId', centerId);
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 86400000);
 

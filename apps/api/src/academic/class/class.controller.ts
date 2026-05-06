@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Request,
+  Query,
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
@@ -27,8 +28,8 @@ export class ClassController {
 
   @Get()
   @Permissions('CLASS_ACADEMIC.VIEW')
-  async findAll(@Request() req: any) {
-    const where = CenterScope.filter(req.user);
+  async findAll(@Request() req: any, @Query('centerId') centerId?: string) {
+    const where = CenterScope.filter(req.user, 'centerId', centerId);
     return this.prisma.class.findMany({
       where,
       include: {

@@ -9,7 +9,16 @@ export class CenterScope {
    * Generates a where clause for center filtering.
    * If the user is SUPER_ADMIN, it typically bypasses filtering (unless centerId is explicitly provided).
    */
-  static filter(user: any, centerIdField: string = 'centerId') {
+  static filter(user: any, centerIdField: string = 'centerId', requestedCenterId?: string | null) {
+    const normalizedCenterId = requestedCenterId && requestedCenterId !== 'all'
+      ? requestedCenterId
+      : null;
+
+    if (normalizedCenterId) {
+      this.validate(user, normalizedCenterId);
+      return { [centerIdField]: normalizedCenterId };
+    }
+
     // SUPER_ADMIN can see everything
     if (user.role === 'SUPER_ADMIN') {
       return {};

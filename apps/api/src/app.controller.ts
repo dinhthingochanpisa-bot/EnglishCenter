@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, Query } from '@nestjs/common';
 import { AppService } from './app.service';
 import { JwtAuthGuard } from './auth/guards/auth.guards';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
@@ -25,8 +25,8 @@ export class AppController {
 
   @UseGuards(JwtAuthGuard)
   @Get('centers')
-  async getCenters(@Request() req: any) {
-    const where = CenterScope.filter(req.user);
+  async getCenters(@Request() req: any, @Query('centerId') centerId?: string) {
+    const where = CenterScope.filter(req.user, 'id', centerId);
     return this.prisma.center.findMany({
       where,
       select: {

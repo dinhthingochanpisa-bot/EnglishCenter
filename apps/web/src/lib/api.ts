@@ -1,4 +1,5 @@
 import { withApiBaseUrl } from './config';
+import { withCenterScope } from './center-scope';
 
 async function tryRefreshToken() {
   const response = await fetch(withApiBaseUrl('/auth/refresh'), {
@@ -22,12 +23,14 @@ export async function apiFetch<T = any>(url: string, options: RequestInit = {}):
     },
   };
 
-  let response = await fetch(withApiBaseUrl(url), baseOptions);
+  const scopedUrl = withCenterScope(url, baseOptions.method);
+
+  let response = await fetch(withApiBaseUrl(scopedUrl), baseOptions);
 
   if (response.status === 401) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
-      response = await fetch(withApiBaseUrl(url), baseOptions);
+      response = await fetch(withApiBaseUrl(scopedUrl), baseOptions);
     }
   }
 

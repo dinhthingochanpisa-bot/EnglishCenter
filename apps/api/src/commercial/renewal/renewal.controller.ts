@@ -23,8 +23,12 @@ export class RenewalController {
 
   @Get('candidates')
   @Permissions('RENEWAL_RETENTION.VIEW')
-  async findCandidates(@Request() req: any, @Query('days') days?: string) {
-    const where = CenterScope.filter(req.user);
+  async findCandidates(
+    @Request() req: any,
+    @Query('days') days?: string,
+    @Query('centerId') centerId?: string,
+  ) {
+    const where = CenterScope.filter(req.user, 'centerId', centerId);
     return this.renewalService.findRenewalCandidates(where, days ? parseInt(days) : 30);
   }
 

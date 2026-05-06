@@ -6,8 +6,13 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ParentService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(user: any, search?: string) {
-    const allowedCenterIds = user.role === 'SUPER_ADMIN' ? null : user.allowedCenterIds;
+  async findAll(user: any, search?: string, centerId?: string) {
+    const allowedCenterIds =
+      centerId && centerId !== 'all'
+        ? (CenterScope.validate(user, centerId), [centerId])
+        : user.role === 'SUPER_ADMIN'
+          ? null
+          : user.allowedCenterIds;
     const trimmedSearch = search?.trim();
 
     const where: any = {

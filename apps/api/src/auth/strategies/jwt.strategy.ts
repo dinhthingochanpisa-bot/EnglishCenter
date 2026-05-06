@@ -33,7 +33,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
               },
             },
           },
-          centers: { select: { centerId: true } },
+          centers: {
+            include: {
+              center: { select: { id: true, code: true, name: true } },
+            },
+          },
         },
       });
 
@@ -51,6 +55,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: user.role.code,
         permissions: user.role.permissions.map((item) => item.permission.code),
         allowedCenterIds: user.centers.map((c) => c.centerId),
+        centers: user.centers.map((item) => ({
+          id: item.centerId,
+          code: item.center?.code,
+          name: item.center?.name,
+        })),
       };
     } catch (error) {
       console.error('[AUTH ERROR] JwtStrategy.validate:', error);

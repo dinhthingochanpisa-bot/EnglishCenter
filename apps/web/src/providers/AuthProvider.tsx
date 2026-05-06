@@ -12,6 +12,7 @@ interface User {
   role: string;
   permissions: string[];
   allowedCenterIds?: string[];
+  centers?: Array<{ id: string; code?: string; name?: string }>;
 }
 
 interface AuthContextType {

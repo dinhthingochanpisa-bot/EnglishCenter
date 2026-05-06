@@ -21,9 +21,9 @@ import { PhoneUtility } from '../common/utils/phone.utils';
 export class LeadService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(user: any) {
+  async findAll(user: any, centerId?: string) {
     try {
-      const where = CenterScope.filter(user);
+      const where = CenterScope.filter(user, 'centerId', centerId);
       return await this.prisma.lead.findMany({
         where,
         include: {

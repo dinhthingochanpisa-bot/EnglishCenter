@@ -7,11 +7,15 @@ import { ContractStatus, PaymentStatus } from '@prisma/client';
 export class FamilyService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(user: any, search?: string) {
+  async findAll(user: any, search?: string, centerId?: string) {
     const where: any = {};
 
     const allowedCenterIds =
-      user.role === 'SUPER_ADMIN' ? null : user.allowedCenterIds;
+      centerId && centerId !== 'all'
+        ? (CenterScope.validate(user, centerId), [centerId])
+        : user.role === 'SUPER_ADMIN'
+          ? null
+          : user.allowedCenterIds;
 
     if (allowedCenterIds) {
       where.relations = {

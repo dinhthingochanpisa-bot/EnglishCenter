@@ -7,6 +7,7 @@ import {
   Patch,
   UseGuards,
   Request,
+  Query,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/auth.guards';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard';
@@ -25,8 +26,8 @@ export class ContractController {
 
   @Get()
   @Permissions('CONTRACT.VIEW')
-  async findAll(@Request() req: any) {
-    const where = CenterScope.filter(req.user);
+  async findAll(@Request() req: any, @Query('centerId') centerId?: string) {
+    const where = CenterScope.filter(req.user, 'centerId', centerId);
     return this.contractService.findAll(where);
   }
 

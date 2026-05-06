@@ -7,8 +7,8 @@ import { LeadStatus, OpportunityStatus } from '@prisma/client';
 export class CrmService {
   constructor(private prisma: PrismaService) {}
 
-  async getPipeline(user: any) {
-    const where = CenterScope.filter(user);
+  async getPipeline(user: any, centerId?: string) {
+    const where = CenterScope.filter(user, 'centerId', centerId);
 
     // Fetch Leads (stages 1-3)
     const leads = await this.prisma.lead.findMany({

@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  Query,
   UseGuards,
   Request,
   NotFoundException,
@@ -120,9 +121,9 @@ export class StudentController {
 
   @Get()
   @Permissions('STUDENT.VIEW')
-  async findAll(@Request() req: any) {
+  async findAll(@Request() req: any, @Query('centerId') centerId?: string) {
     const { user } = req;
-    const where = CenterScope.filter(user);
+    const where = CenterScope.filter(user, 'centerId', centerId);
     return this.prisma.student.findMany({
       where,
       include: {
@@ -229,6 +230,7 @@ export class StudentController {
         currentGrade: body.currentGrade !== undefined ? body.currentGrade?.trim() || null : undefined,
         address: body.address !== undefined ? body.address?.trim() || null : undefined,
         aim: body.aim !== undefined ? body.aim?.trim() || null : undefined,
+        expectedExamTime: body.expectedExamTime !== undefined ? body.expectedExamTime?.trim() || null : undefined,
         notes: body.notes !== undefined ? body.notes?.trim() || null : undefined,
       },
     });
