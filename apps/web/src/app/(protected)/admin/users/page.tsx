@@ -242,7 +242,7 @@ export default function UserManagementPage() {
       {/* User Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
               <h2 className="text-xl font-bold text-slate-900">
                 {editingUser ? 'Chỉnh sửa người dùng' : 'Thêm người dùng mới'}
@@ -252,7 +252,8 @@ export default function UserManagementPage() {
               </button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
                {formError && (
                  <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">
                    {formError}
@@ -424,7 +425,9 @@ export default function UserManagementPage() {
                   <label htmlFor="isActive" className="text-sm font-medium text-slate-700">Kích hoạt tài khoản</label>
                </div>
 
-               <div className="flex justify-end gap-3 pt-6 border-t border-slate-50 mt-4">
+              </div>
+
+               <div className="flex justify-end gap-3 border-t border-slate-100 bg-white p-4">
                   <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Hủy</Button>
                   <Button type="submit" isLoading={isSaving} className="min-w-[120px]">
                     Lưu thay đổi
