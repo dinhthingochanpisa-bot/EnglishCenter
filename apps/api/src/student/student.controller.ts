@@ -174,6 +174,73 @@ export class StudentController {
 
     if (student) {
       CenterScope.validate(user, student.centerId);
+
+      const familyIds = student.relations
+        .map((relation) => relation.familyId)
+        .filter(Boolean) as string[];
+      const parentIds = student.relations.map((relation) => relation.parentId);
+
+      const siblingRelations =
+        await this.prisma.parentStudentRelation.findMany({
+          where: {
+            studentId: { not: id },
+            OR: [
+              { familyId: { in: familyIds } },
+              { parentId: { in: parentIds } },
+            ],
+          },
+          include: {
+            student: {
+              include: {
+                center: { select: { id: true, name: true } },
+                classStudent: {
+                  where: { status: 'ACTIVE' },
+                  include: {
+                    class: { select: { id: true, name: true, code: true } },
+                  },
+                  take: 1,
+                },
+              },
+            },
+            parent: { select: { fullName: true } },
+            family: { select: { name: true, code: true } },
+          },
+        });
+
+      const allowedCenterIds =
+        user.role === 'SUPER_ADMIN'
+          ? null
+          : Array.isArray(user.allowedCenterIds)
+            ? user.allowedCenterIds
+            : [];
+      const siblingMap = new Map();
+
+      for (const relation of siblingRelations) {
+        const sibling = relation.student;
+        if (
+          allowedCenterIds &&
+          !allowedCenterIds.includes(sibling.centerId)
+        ) {
+          continue;
+        }
+
+        if (!siblingMap.has(sibling.id)) {
+          siblingMap.set(sibling.id, {
+            id: sibling.id,
+            fullName: sibling.fullName,
+            code: sibling.code,
+            status: sibling.status,
+            centerName: sibling.center.name,
+            className: sibling.classStudent?.[0]?.class?.name || null,
+            productName: sibling.productName,
+            feePackage: sibling.feePackage,
+            sharedParentName: relation.parent.fullName,
+            familyName: relation.family?.name || null,
+          });
+        }
+      }
+
+      (student as any).siblings = Array.from(siblingMap.values());
     }
     return student;
   }

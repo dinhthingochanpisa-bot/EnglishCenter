@@ -592,21 +592,68 @@ export default function StudentDetailClient({ id }: { id: string }) {
                </div>
             </Card>
 
-            <Card className="p-6 space-y-6">
-               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Liên hệ & Phụ huynh</h3>
-               {student.relations?.map((rel: any) => (
-                  <div key={rel.id} className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
-                     <div className="flex justify-between items-center">
-                        <p className="text-sm font-bold text-slate-900">{rel.parent.fullName}</p>
-                        <Badge variant="secondary" className="text-[10px]">{rel.relationship}</Badge>
-                     </div>
-                     <div className="flex flex-col gap-1">
-                        <p className="text-xs text-slate-500 flex items-center gap-2"><Phone size={12} /> {rel.parent.phone}</p>
-                        <p className="text-xs text-slate-500 flex items-center gap-2"><Mail size={12} /> {rel.parent.email}</p>
-                     </div>
-                  </div>
-               ))}
-            </Card>
+            <div className="space-y-6">
+              <Card className="p-6 space-y-6">
+                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Liên hệ & Phụ huynh</h3>
+                {student.relations?.map((rel: any) => (
+                    <div key={rel.id} className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                      <div className="flex justify-between items-center">
+                          <p className="text-sm font-bold text-slate-900">{rel.parent.fullName}</p>
+                          <Badge variant="secondary" className="text-[10px]">{rel.relationship}</Badge>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                          <p className="text-xs text-slate-500 flex items-center gap-2"><Phone size={12} /> {rel.parent.phone}</p>
+                          <p className="text-xs text-slate-500 flex items-center gap-2"><Mail size={12} /> {rel.parent.email}</p>
+                      </div>
+                    </div>
+                ))}
+              </Card>
+
+              <Card className="p-6 space-y-6">
+                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Anh/chị/em ruột</h3>
+                <div className="space-y-4">
+                    {student.siblings?.map((sib: any) => (
+                      <Link key={sib.id} href={`/students/${sib.id}`} className="block">
+                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-primary/30 hover:bg-white transition-all group">
+                          <div className="flex justify-between items-start mb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">
+                                    {sib.fullName.charAt(0)}
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-slate-900 group-hover:text-primary transition-colors">{sib.fullName}</p>
+                                    <p className="text-[10px] text-slate-400 font-mono">{sib.code}</p>
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className="text-[9px] uppercase tracking-tighter whitespace-nowrap">
+                                {getStudentStatusLabel(sib.status)}
+                              </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-200/50 text-[11px]">
+                              <div className="space-y-1">
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Lớp học</p>
+                                <p className="font-medium text-slate-700 truncate">{sib.className || 'Chưa vào lớp'}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Sản phẩm</p>
+                                <p className="font-medium text-slate-700 truncate">{sib.productName || sib.feePackage || 'N/A'}</p>
+                              </div>
+                          </div>
+                          <div className="mt-2 flex items-center gap-2">
+                              <p className="text-[9px] text-slate-400 italic">
+                                {sib.familyName ? `Cùng gia đình: ${sib.familyName}` : `Chung phụ huynh: ${sib.sharedParentName}`}
+                              </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                    {!student.siblings?.length && (
+                      <p className="text-sm text-slate-400 italic py-2">Chưa ghi nhận anh/chị/em ruột tại trung tâm.</p>
+                    )}
+                </div>
+              </Card>
+            </div>
+
             <div className="md:col-span-2">
               <AuditTrail entityType="STUDENT" entityId={id} />
             </div>
