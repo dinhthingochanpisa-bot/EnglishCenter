@@ -10,9 +10,20 @@ interface User {
   email: string;
   fullName?: string;
   role: string;
+  roleId?: string;
+  userRoleId?: string;
+  roleName?: string;
   permissions: string[];
   allowedCenterIds?: string[];
   centers?: Array<{ id: string; code?: string; name?: string }>;
+  availableRoles?: Array<{
+    userRoleId: string;
+    roleId: string;
+    role: string;
+    roleName: string;
+    centers?: Array<{ id: string; code?: string; name?: string }>;
+    isDefault?: boolean;
+  }>;
 }
 
 interface AuthContextType {

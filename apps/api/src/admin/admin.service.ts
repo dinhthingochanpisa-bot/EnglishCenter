@@ -55,6 +55,11 @@ const DEFAULT_MONBAY_CONFIG = {
   },
 };
 
+type UserRoleAssignmentInput = {
+  roleId: string;
+  centerIds: string[];
+};
+
 const USER_SELECT = {
   id: true,
   email: true,
@@ -69,6 +74,22 @@ const USER_SELECT = {
       centerId: true,
       center: true,
     },
+  },
+  userRoles: {
+    select: {
+      id: true,
+      roleId: true,
+      isDefault: true,
+      isActive: true,
+      role: true,
+      centers: {
+        select: {
+          centerId: true,
+          center: true,
+        },
+      },
+    },
+    orderBy: [{ isDefault: 'desc' as const }, { createdAt: 'asc' as const }],
   },
 };
 
@@ -352,18 +373,31 @@ export class AdminService {
       data.password || 'password123',
       10,
     );
-    return this.prisma.user.create({
-      data: {
-        email: data.email,
-        password: hashedPassword,
-        fullName: data.fullName,
-        roleId: data.roleId,
-        isActive: data.isActive !== undefined ? data.isActive : true,
-        centers: {
-          create: data.centerIds?.map((id: string) => ({ centerId: id })) || [],
+    return this.prisma.$transaction(async (tx) => {
+      const roleAssignments = this.normalizeUserRoleAssignments(data);
+      const user = await tx.user.create({
+        data: {
+          email: data.email,
+          password: hashedPassword,
+          fullName: data.fullName,
+          roleId: roleAssignments[0].roleId,
+          isActive: data.isActive !== undefined ? data.isActive : true,
+          centers: {
+            create: roleAssignments[0].centerIds.map((id: string) => ({ centerId: id })),
+          },
+          userRoles: {
+            create: roleAssignments.map((assignment: UserRoleAssignmentInput, index: number) => ({
+              roleId: assignment.roleId,
+              isDefault: index === 0,
+              isActive: true,
+              centers: {
+                create: assignment.centerIds.map((centerId: string) => ({ centerId })),
+              },
+            })),
+          },
         },
-      },
-      select: USER_SELECT,
+      });
+      return tx.user.findUnique({ where: { id: user.id }, select: USER_SELECT });
     });
   }
 
@@ -371,10 +405,11 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
+    const roleAssignments = this.normalizeUserRoleAssignments(data);
     const updateData: any = {
       email: data.email,
       fullName: data.fullName,
-      roleId: data.roleId,
+      roleId: roleAssignments[0].roleId,
       isActive: data.isActive,
     };
 
@@ -382,19 +417,60 @@ export class AdminService {
       updateData.password = await bcrypt.hash(data.password, 10);
     }
 
-    if (data.centerIds) {
-      // Simple sync: delete all and recreate
-      await this.prisma.userCenter.deleteMany({ where: { userId: id } });
-      updateData.centers = {
-        create: data.centerIds.map((cId: string) => ({ centerId: cId })),
-      };
+    return this.prisma.$transaction(async (tx) => {
+      await tx.userCenter.deleteMany({ where: { userId: id } });
+      await tx.userRole.deleteMany({ where: { userId: id } });
+
+      await tx.user.update({
+        where: { id },
+        data: {
+          ...updateData,
+          centers: {
+            create: roleAssignments[0].centerIds.map((cId: string) => ({ centerId: cId })),
+          },
+          userRoles: {
+            create: roleAssignments.map((assignment: UserRoleAssignmentInput, index: number) => ({
+              roleId: assignment.roleId,
+              isDefault: index === 0,
+              isActive: true,
+              centers: {
+                create: assignment.centerIds.map((centerId: string) => ({ centerId })),
+              },
+            })),
+          },
+        },
+      });
+
+      return tx.user.findUnique({ where: { id }, select: USER_SELECT });
+    });
+  }
+
+  private normalizeUserRoleAssignments(data: any): UserRoleAssignmentInput[] {
+    const rawAssignments =
+      Array.isArray(data.roleAssignments) && data.roleAssignments.length
+        ? data.roleAssignments
+        : [{ roleId: data.roleId, centerIds: data.centerIds || [] }];
+
+    const seen = new Set<string>();
+    const assignments = rawAssignments
+      .map((item: any) => ({
+        roleId: String(item.roleId || '').trim(),
+        centerIds: Array.isArray(item.centerIds)
+          ? [...new Set(item.centerIds.filter(Boolean))]
+          : [],
+      }))
+      .filter((item: any) => item.roleId)
+      .filter((item: any) => {
+        if (seen.has(item.roleId)) return false;
+        seen.add(item.roleId);
+        return true;
+      });
+
+    if (!assignments.length) {
+      throw new BadRequestException('Vui lòng chọn ít nhất một vai trò');
     }
 
-    return this.prisma.user.update({
-      where: { id },
-      data: updateData,
-      select: USER_SELECT,
-    });
+    return assignments;
   }
 
   async deleteUser(id: string) {

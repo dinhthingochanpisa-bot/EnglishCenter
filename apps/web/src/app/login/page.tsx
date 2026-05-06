@@ -7,10 +7,12 @@ import { LogIn, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { withApiBaseUrl } from '@/lib/config';
+import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const { branding } = useTheme();
   const { login } = useAuth();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('superadmin@example.com');
@@ -35,6 +37,14 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
+      if (data.requiresRoleSelection) {
+        window.sessionStorage.setItem('roleSelection', JSON.stringify({
+          user: data.user,
+          availableRoles: data.availableRoles || [],
+        }));
+        router.push('/select-role');
+        return;
+      }
       login(data.user);
     } catch (err: any) {
       setError(err.message);

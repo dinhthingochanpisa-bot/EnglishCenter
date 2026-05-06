@@ -67,6 +67,7 @@ model Role {
   name        String
   permissions RolePermission[]
   users       User[]
+  userRoles   UserRole[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 }
@@ -95,6 +96,7 @@ model Center {
   address        String?
   phone          String?
   users          UserCenter[]
+  userRoles      UserRoleCenter[]
   students       Student[]
   leads          Lead[]
   contracts      Contract[]
@@ -119,6 +121,7 @@ model User {
   role            Role             @relation(fields: [roleId], references: [id])
   isActive        Boolean          @default(true)
   centers         UserCenter[]
+  userRoles       UserRole[]
   auditLogs       AuditLog[]
   managedLeads    Lead[]           @relation("LeadOwner")
   managedContracts Contract[]      @relation("ContractSalesperson")
@@ -134,6 +137,30 @@ model User {
   refreshToken    String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+}
+
+model UserRole {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role             @relation(fields: [roleId], references: [id])
+  centers   UserRoleCenter[]
+  isDefault Boolean          @default(false)
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([userId, roleId])
+}
+
+model UserRoleCenter {
+  userRoleId String
+  userRole   UserRole @relation(fields: [userRoleId], references: [id], onDelete: Cascade)
+  centerId   String
+  center     Center   @relation(fields: [centerId], references: [id])
+
+  @@id([userRoleId, centerId])
 }
 
 model UserCenter {

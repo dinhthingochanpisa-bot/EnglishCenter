@@ -39,6 +39,7 @@ export default function UserManagementPage() {
     password: '',
     roleId: '',
     centerIds: [] as string[],
+    roleAssignments: [] as Array<{ roleId: string; centerIds: string[] }>,
     isActive: true
   });
 
@@ -73,6 +74,12 @@ export default function UserManagementPage() {
         password: '', // Don't show password
         roleId: user.roleId,
         centerIds: user.centers?.map((c: any) => c.centerId) || [],
+        roleAssignments: user.userRoles?.length
+          ? user.userRoles.map((item: any) => ({
+              roleId: item.roleId,
+              centerIds: item.centers?.map((center: any) => center.centerId) || [],
+            }))
+          : [{ roleId: user.roleId, centerIds: user.centers?.map((c: any) => c.centerId) || [] }],
         isActive: user.isActive
       });
     } else {
@@ -83,6 +90,7 @@ export default function UserManagementPage() {
         password: '',
         roleId: roles[0]?.id || '',
         centerIds: [],
+        roleAssignments: [{ roleId: roles[0]?.id || '', centerIds: [] }],
         isActive: true
       });
     }
@@ -98,7 +106,12 @@ export default function UserManagementPage() {
       const url = editingUser ? `/admin/users/${editingUser.id}` : '/admin/users';
       const method = editingUser ? 'PATCH' : 'POST';
       
-      const payload = { ...formData };
+      const payload = {
+        ...formData,
+        roleId: formData.roleAssignments[0]?.roleId || formData.roleId,
+        centerIds: formData.roleAssignments[0]?.centerIds || formData.centerIds,
+        roleAssignments: formData.roleAssignments.filter((item) => item.roleId),
+      };
       if (editingUser && !payload.password) delete (payload as any).password;
 
       const savedUser = await apiFetch(url, {
@@ -283,7 +296,13 @@ export default function UserManagementPage() {
                   <label className="text-xs font-bold text-slate-500 uppercase">Vai trò</label>
                   <select 
                     value={formData.roleId}
-                    onChange={(e) => setFormData({...formData, roleId: e.target.value})}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      roleId: e.target.value,
+                      roleAssignments: formData.roleAssignments.map((item, index) =>
+                        index === 0 ? { ...item, roleId: e.target.value } : item,
+                      ),
+                    })}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none bg-white font-medium text-slate-700"
                   >
                     {roles.map(role => (
@@ -304,13 +323,93 @@ export default function UserManagementPage() {
                               const ids = e.target.checked 
                                 ? [...formData.centerIds, center.id]
                                 : formData.centerIds.filter(id => id !== center.id);
-                              setFormData({...formData, centerIds: ids});
+                              setFormData({
+                                ...formData,
+                                centerIds: ids,
+                                roleAssignments: formData.roleAssignments.map((item, index) =>
+                                  index === 0 ? { ...item, centerIds: ids } : item,
+                                ),
+                              });
                             }}
                             className="rounded border-slate-300 text-primary focus:ring-primary h-4 w-4"
                           />
                           <span className="text-xs font-medium text-slate-700 truncate">{center.name}</span>
                        </label>
                      ))}
+                  </div>
+               </div>
+
+               <div className="rounded-xl border border-slate-100 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase text-slate-500">Vai trò bổ sung</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFormData((current) => ({
+                        ...current,
+                        roleAssignments: [
+                          ...current.roleAssignments,
+                          { roleId: roles[0]?.id || '', centerIds: [] },
+                        ],
+                      }))}
+                    >
+                      <Plus size={14} /> Thêm
+                    </Button>
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    {formData.roleAssignments.slice(1).map((assignment, offset) => {
+                      const index = offset + 1;
+                      return (
+                        <div key={index} className="rounded-lg bg-slate-50 p-3">
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={assignment.roleId}
+                              onChange={(event) => {
+                                const next = [...formData.roleAssignments];
+                                next[index] = { ...assignment, roleId: event.target.value };
+                                setFormData({ ...formData, roleAssignments: next });
+                              }}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                            >
+                              {roles.map(role => (
+                                <option key={role.id} value={role.id}>{role.name}</option>
+                              ))}
+                            </select>
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              onClick={() => setFormData((current) => ({
+                                ...current,
+                                roleAssignments: current.roleAssignments.filter((_, idx) => idx !== index),
+                              }))}
+                            >
+                              <X size={14} />
+                            </Button>
+                          </div>
+                          <div className="mt-2 grid max-h-28 grid-cols-2 gap-2 overflow-y-auto">
+                            {centers.map(center => (
+                              <label key={center.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-100 bg-white p-2">
+                                <input
+                                  type="checkbox"
+                                  checked={assignment.centerIds.includes(center.id)}
+                                  onChange={(event) => {
+                                    const ids = event.target.checked
+                                      ? [...assignment.centerIds, center.id]
+                                      : assignment.centerIds.filter(id => id !== center.id);
+                                    const next = [...formData.roleAssignments];
+                                    next[index] = { ...assignment, centerIds: ids };
+                                    setFormData({ ...formData, roleAssignments: next });
+                                  }}
+                                />
+                                <span className="truncate text-xs">{center.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                </div>
 

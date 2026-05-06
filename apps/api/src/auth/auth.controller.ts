@@ -1,4 +1,4 @@
-import { Controller, Post, UseGuards, Get, Res, Request } from '@nestjs/common';
+import { Controller, Post, UseGuards, Get, Res, Request, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from '../common/decorators/public.decorator';
 import {
@@ -47,8 +47,18 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(@Request() req: any, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.login(req.user);
+    const result: any = await this.authService.login(req.user);
     const cookieOptions = this.getCookieOptions();
+
+    if (result.requiresRoleSelection) {
+      res.cookie('role_selection_token', result.selection_token, {
+        ...cookieOptions,
+        httpOnly: true,
+        maxAge: 10 * 60 * 1000,
+      });
+      const { selection_token, ...safeResult } = result;
+      return safeResult;
+    }
 
     res.cookie('access_token', result.access_token, {
       ...cookieOptions,
@@ -67,6 +77,37 @@ export class AuthController {
   }
 
   @Public()
+  @Post('select-role')
+  async selectRole(
+    @Body('userRoleId') userRoleId: string,
+    @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.selectRole(
+      req.cookies?.role_selection_token,
+      userRoleId,
+    );
+    const cookieOptions = this.getCookieOptions();
+
+    res.cookie('access_token', result.access_token, {
+      ...cookieOptions,
+      httpOnly: true,
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie('refresh_token', result.refresh_token, {
+      ...cookieOptions,
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.clearCookie('role_selection_token', cookieOptions);
+
+    const { refresh_token, access_token, ...safeResult } = result;
+    return safeResult;
+  }
+
+  @Public()
   @UseGuards(RefreshAuthGuard)
   @Post('refresh')
   async refresh(
@@ -76,6 +117,7 @@ export class AuthController {
     const result = await this.authService.refreshTokens(
       req.user.sub,
       req.user.refreshToken,
+      req.user.userRoleId,
     );
     const cookieOptions = this.getCookieOptions();
 
@@ -102,6 +144,7 @@ export class AuthController {
     const cookieOptions = this.getCookieOptions();
     res.clearCookie('access_token', cookieOptions);
     res.clearCookie('refresh_token', cookieOptions);
+    res.clearCookie('role_selection_token', cookieOptions);
     return { message: 'Logged out successfully' };
   }
 
