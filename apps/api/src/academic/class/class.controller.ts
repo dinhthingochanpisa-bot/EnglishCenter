@@ -36,7 +36,7 @@ export class ClassController {
         program: true,
         center: { select: { id: true, name: true, code: true } },
         teacher: { select: { id: true, fullName: true } },
-        _count: { select: { students: true } },
+        _count: { select: { students: { where: { status: 'ACTIVE' } } } },
       },
       orderBy: { code: 'asc' },
     });
@@ -53,6 +53,7 @@ export class ClassController {
         teacher: { select: { id: true, fullName: true, email: true } },
         schedules: true,
         students: {
+          where: { status: 'ACTIVE' },
           include: {
             student: {
               select: {
@@ -65,6 +66,7 @@ export class ClassController {
           },
           orderBy: { student: { fullName: 'asc' } },
         },
+        _count: { select: { students: { where: { status: 'ACTIVE' } } } },
       },
     });
 
@@ -81,16 +83,19 @@ export class ClassController {
 
     if (!data.programId) throw new BadRequestException('Program is required');
     if (!data.centerId) throw new BadRequestException('Center is required');
-    if (!data.name?.trim()) throw new BadRequestException('Class name is required');
+    if (!data.name?.trim())
+      throw new BadRequestException('Class name is required');
 
     // Auto-generate code if missing
     if (!data.code) {
-       data.code = `CLS-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      data.code = `CLS-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
     }
 
     const schedules = Array.isArray(data.schedules)
       ? data.schedules
-          .filter((item: any) => item.dayOfWeek && item.startTime && item.endTime)
+          .filter(
+            (item: any) => item.dayOfWeek && item.startTime && item.endTime,
+          )
           .map((item: any) => ({
             centerId: data.centerId,
             dayOfWeek: Number(item.dayOfWeek),
@@ -116,7 +121,11 @@ export class ClassController {
 
   @Patch(':id')
   @Permissions('CLASS_ACADEMIC.UPDATE')
-  async update(@Param('id') id: string, @Body() data: any, @Request() req: any) {
+  async update(
+    @Param('id') id: string,
+    @Body() data: any,
+    @Request() req: any,
+  ) {
     const cls = await this.prisma.class.findUnique({ where: { id } });
     if (!cls) throw new NotFoundException('Class not found');
     CenterScope.validate(req.user, cls.centerId);
@@ -127,119 +136,187 @@ export class ClassController {
         name: data.name,
         code: data.code,
         status: data.status,
-        capacity: data.capacity !== undefined ? Number(data.capacity) : undefined,
+        capacity:
+          data.capacity !== undefined ? Number(data.capacity) : undefined,
         teacherId: data.teacherId || undefined,
         programId: data.programId,
-        schedules: data.schedules ? {
-          deleteMany: {},
-          create: data.schedules
-            .filter((item: any) => item.dayOfWeek && item.startTime && item.endTime)
-            .map((item: any) => ({
-              centerId: cls.centerId,
-              dayOfWeek: Number(item.dayOfWeek),
-              startTime: item.startTime,
-              endTime: item.endTime,
-              room: item.room || null,
-            }))
-        } : undefined
+        schedules: data.schedules
+          ? {
+              deleteMany: {},
+              create: data.schedules
+                .filter(
+                  (item: any) =>
+                    item.dayOfWeek && item.startTime && item.endTime,
+                )
+                .map((item: any) => ({
+                  centerId: cls.centerId,
+                  dayOfWeek: Number(item.dayOfWeek),
+                  startTime: item.startTime,
+                  endTime: item.endTime,
+                  room: item.room || null,
+                })),
+            }
+          : undefined,
       },
     });
   }
 
   @Get(':id/available-students')
   @Permissions('CLASS_ACADEMIC.VIEW')
-  async findAvailableStudents(@Param('id') id: string, @Request() req: any) {
+  async findAvailableStudents(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Query('keyword') keyword?: string,
+  ) {
     const cls = await this.prisma.class.findUnique({
       where: { id },
-      include: { students: { select: { studentId: true } } },
+      include: {
+        students: {
+          where: { status: 'ACTIVE' },
+          select: { studentId: true },
+        },
+      },
     });
     if (!cls) throw new NotFoundException('Class not found');
     CenterScope.validate(req.user, cls.centerId);
 
     const enrolledIds = cls.students.map((item) => item.studentId);
-    return this.prisma.student.findMany({
-      where: {
-        centerId: cls.centerId,
-        id: enrolledIds.length ? { notIn: enrolledIds } : undefined,
-      },
-      select: {
-        id: true,
-        fullName: true,
-        code: true,
-        status: true,
-        studentPhone: true,
+    const searchKeyword = keyword?.trim();
+
+    const where: any = {
+      centerId: cls.centerId,
+      id: enrolledIds.length ? { notIn: enrolledIds } : undefined,
+    };
+
+    if (searchKeyword) {
+      where.OR = [
+        { fullName: { contains: searchKeyword, mode: 'insensitive' } },
+        { studentPhone: { contains: searchKeyword, mode: 'insensitive' } },
+        { code: { contains: searchKeyword, mode: 'insensitive' } },
+      ];
+    }
+
+    const students = await this.prisma.student.findMany({
+      where,
+      include: {
+        classStudent: {
+          where: { status: 'ACTIVE' },
+          include: { class: { select: { name: true } } },
+          take: 1,
+        },
       },
       orderBy: { fullName: 'asc' },
+      take: searchKeyword ? 100 : 20,
     });
+
+    return students
+      .sort((a, b) => {
+        const getPriority = (student: (typeof students)[number]) => {
+          if (student.status === 'PENDING') return 0;
+          if (student.classStudent.length > 0) return 1;
+          return 2;
+        };
+
+        const priorityDiff = getPriority(a) - getPriority(b);
+        if (priorityDiff !== 0) return priorityDiff;
+
+        return a.fullName.localeCompare(b.fullName);
+      })
+      .slice(0, 20);
   }
 
   @Post(':id/enroll')
   @Permissions('CLASS_ACADEMIC.UPDATE')
-  async enroll(@Param('id') id: string, @Body() body: { studentId: string }, @Request() req: any) {
+  async enroll(
+    @Param('id') id: string,
+    @Body() body: { studentId: string },
+    @Request() req: any,
+  ) {
     // 1. Validate Class existence and Center Scope
     const cls = await this.prisma.class.findUnique({
       where: { id },
-      include: { _count: { select: { students: true } } },
     });
     if (!cls) throw new NotFoundException('Class not found');
     CenterScope.validate(req.user, cls.centerId);
 
     // 2. Check Capacity
-    if (cls._count.students >= cls.capacity) {
+    const activeStudentCount = await this.prisma.classStudent.count({
+      where: { classId: id, status: 'ACTIVE' },
+    });
+    if (activeStudentCount >= cls.capacity) {
       throw new BadRequestException('Class is full');
     }
 
     // 3. Validate Student existence and Center consistency
-    const student = await this.prisma.student.findUnique({ where: { id: body.studentId } });
+    const student = await this.prisma.student.findUnique({
+      where: { id: body.studentId },
+    });
     if (!student) throw new NotFoundException('Student not found');
-    
+
     if (student.centerId !== cls.centerId) {
-      throw new BadRequestException('Student and Class must be in the same center');
+      throw new BadRequestException(
+        'Student and Class must be in the same center',
+      );
     }
 
     // 4. Check duplicate active enrollment in THIS class
     const existingClassStudent = await this.prisma.classStudent.findUnique({
-      where: { classId_studentId: { classId: id, studentId: body.studentId } }
+      where: { classId_studentId: { classId: id, studentId: body.studentId } },
     });
-    if (existingClassStudent) throw new BadRequestException('Student already enrolled in this class');
+    if (existingClassStudent?.status === 'ACTIVE')
+      throw new BadRequestException('Student already enrolled in this class');
 
     // 5. Execute Transaction
     return this.prisma.$transaction(async (tx) => {
-      // Create ClassStudent link
-      const classStudent = await tx.classStudent.create({
-        data: {
-          classId: id,
+      // Transfer Logic: deactivate previous active class links and keep history.
+      await tx.classStudent.updateMany({
+        where: {
           studentId: body.studentId,
-          status: 'ACTIVE'
-        }
+          classId: { not: id },
+          status: 'ACTIVE',
+        },
+        data: { status: 'DROPPED' },
       });
 
-      // Upsert Enrollment record for the program
-      await tx.enrollment.upsert({
+      // Create or reactivate ClassStudent link
+      const classStudent = await tx.classStudent.upsert({
         where: {
-          // Note: In a real system, you might need a unique constraint on (studentId, programId)
-          // For now, we search for existing enrollment or create a new one
-          id: (await tx.enrollment.findFirst({
-            where: { studentId: body.studentId, programId: cls.programId }
-          }))?.id || 'new-uuid' 
+          classId_studentId: { classId: id, studentId: body.studentId },
         },
+        update: { status: 'ACTIVE' },
         create: {
+          classId: id,
           studentId: body.studentId,
-          programId: cls.programId,
-          classId: id,
           status: 'ACTIVE',
-          startDate: new Date(),
         },
-        update: {
-          classId: id,
-          status: 'ACTIVE',
-        }
       });
+
+      const existingEnrollment = await tx.enrollment.findFirst({
+        where: { studentId: body.studentId, programId: cls.programId },
+        select: { id: true },
+      });
+
+      if (existingEnrollment) {
+        await tx.enrollment.update({
+          where: { id: existingEnrollment.id },
+          data: { classId: id, status: 'ACTIVE', endDate: null },
+        });
+      } else {
+        await tx.enrollment.create({
+          data: {
+            studentId: body.studentId,
+            programId: cls.programId,
+            classId: id,
+            status: 'ACTIVE',
+            startDate: new Date(),
+          },
+        });
+      }
 
       // Update Student Status
       await tx.student.update({
         where: { id: body.studentId },
-        data: { status: 'ACTIVE' }
+        data: { status: 'ACTIVE' },
       });
 
       return classStudent;
@@ -248,7 +325,11 @@ export class ClassController {
 
   @Delete(':id/unenroll/:studentId')
   @Permissions('CLASS_ACADEMIC.UPDATE')
-  async unenroll(@Param('id') id: string, @Param('studentId') studentId: string, @Request() req: any) {
+  async unenroll(
+    @Param('id') id: string,
+    @Param('studentId') studentId: string,
+    @Request() req: any,
+  ) {
     const cls = await this.prisma.class.findUnique({ where: { id } });
     if (!cls) throw new NotFoundException('Class not found');
     CenterScope.validate(req.user, cls.centerId);
@@ -256,26 +337,26 @@ export class ClassController {
     return this.prisma.$transaction(async (tx) => {
       // 1. Delete ClassStudent link
       await tx.classStudent.delete({
-        where: { classId_studentId: { classId: id, studentId } }
+        where: { classId_studentId: { classId: id, studentId } },
       });
 
       // 2. Update Enrollment status (unlinking from class)
       await tx.enrollment.updateMany({
         where: { studentId, classId: id },
-        data: { 
+        data: {
           classId: null,
-          status: 'SUSPENDED' // Marking as suspended as they are out of class
-        }
+          status: 'SUSPENDED', // Marking as suspended as they are out of class
+        },
       });
 
       // 3. Optional: Check if student has other active classes
       const otherClasses = await tx.classStudent.count({
-        where: { studentId, status: 'ACTIVE' }
+        where: { studentId, status: 'ACTIVE' },
       });
       if (otherClasses === 0) {
         await tx.student.update({
           where: { id: studentId },
-          data: { status: 'HOLD' } // Move to HOLD if no active classes
+          data: { status: 'HOLD' }, // Move to HOLD if no active classes
         });
       }
 
