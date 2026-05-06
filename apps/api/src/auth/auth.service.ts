@@ -218,6 +218,20 @@ export class AuthService {
     return this.issueTokens(user, selected);
   }
 
+  async switchRole(userId: string, userRoleId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: this.getUserInclude(),
+    });
+    if (!user || !user.isActive) throw new UnauthorizedException('Access Denied');
+
+    const roleOptions = this.roleOptionsForUser(user);
+    const selected = roleOptions.find((option) => option.userRoleId === userRoleId);
+    if (!selected) throw new UnauthorizedException('Invalid role selection');
+
+    return this.issueTokens(user, selected);
+  }
+
   async refreshTokens(userId: string, refreshToken: string, userRoleId?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

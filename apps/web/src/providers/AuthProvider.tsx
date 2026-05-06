@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
+import { getDefaultWorkspacePath, hasPermission } from '@/lib/role-routing';
 
 interface User {
   userId?: string;
@@ -32,6 +33,7 @@ interface AuthContextType {
   login: (userData: User) => void;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  switchRole: (userRoleId: string) => Promise<void>;
   checkPermission: (permission: string) => boolean;
 }
 
@@ -57,7 +59,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = (userData: User) => {
     setUser(userData);
-    router.push('/dashboard');
+    router.push(getDefaultWorkspacePath(userData));
+  };
+
+  const switchRole = async (userRoleId: string) => {
+    const result = await apiFetch('/auth/switch-role', {
+      method: 'POST',
+      body: JSON.stringify({ userRoleId }),
+    });
+    setUser(result.user);
+    router.push(getDefaultWorkspacePath(result.user));
   };
 
   const logout = async () => {
@@ -74,13 +85,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const checkPermission = (permission: string) => {
-    if (!user) return false;
-    if (user.role === 'SUPER_ADMIN') return true;
-    return user.permissions?.includes(permission) || false;
+    return hasPermission(user, permission);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshProfile, checkPermission }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshProfile, switchRole, checkPermission }}>
       {children}
     </AuthContext.Provider>
   );

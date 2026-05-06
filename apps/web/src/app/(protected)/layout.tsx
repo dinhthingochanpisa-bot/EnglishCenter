@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/providers/AuthProvider';
 import { CenterScopeProvider } from '@/providers/CenterScopeProvider';
+import { getDefaultWorkspacePath, hasPermission } from '@/lib/role-routing';
 
 export default function ProtectedLayout({
   children,
@@ -12,13 +13,19 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isLoading } = useAuth();
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.replace('/login');
+      return;
     }
-  }, [isLoading, user, router]);
+
+    if (!isLoading && user && pathname === '/dashboard' && !hasPermission(user, 'REPORTING.VIEW')) {
+      router.replace(getDefaultWorkspacePath(user));
+    }
+  }, [isLoading, pathname, user, router]);
 
   if (isLoading) {
     return (

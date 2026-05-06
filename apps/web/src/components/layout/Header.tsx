@@ -1,13 +1,30 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, Bell, Globe } from 'lucide-react';
 import { NotificationsDrawer } from '../dashboard/NotificationsDrawer';
 import { useCenterScope } from '@/providers/CenterScopeProvider';
+import { useAuth } from '@/providers/AuthProvider';
 
 export const Header: React.FC = () => {
+  const router = useRouter();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const { selectedCenterId, setSelectedCenterId, centerOptions, selectedCenterLabel } = useCenterScope();
+  const { user, switchRole } = useAuth();
+  const roleOptions = user?.availableRoles || [];
+
+  const handleRoleChange = async (userRoleId: string) => {
+    if (!userRoleId || userRoleId === user?.userRoleId) return;
+    setIsSwitchingRole(true);
+    try {
+      await switchRole(userRoleId);
+    } finally {
+      setIsSwitchingRole(false);
+      router.refresh();
+    }
+  };
 
   return (
     <>
@@ -24,6 +41,21 @@ export const Header: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
+          {roleOptions.length > 1 ? (
+            <select
+              className="max-w-48 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+              value={user?.userRoleId || ''}
+              onChange={(event) => handleRoleChange(event.target.value)}
+              disabled={isSwitchingRole}
+              title="Đổi vai trò làm việc"
+            >
+              {roleOptions.map((role) => (
+                <option key={role.userRoleId} value={role.userRoleId}>
+                  {role.roleName || role.role}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <button
             onClick={() => setIsNotifOpen(true)}
             className="relative rounded-custom p-2 text-slate-500 transition-colors hover:bg-slate-100"

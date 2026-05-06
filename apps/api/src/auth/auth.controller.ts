@@ -107,6 +107,32 @@ export class AuthController {
     return safeResult;
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post('switch-role')
+  async switchRole(
+    @Body('userRoleId') userRoleId: string,
+    @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.switchRole(req.user.userId, userRoleId);
+    const cookieOptions = this.getCookieOptions();
+
+    res.cookie('access_token', result.access_token, {
+      ...cookieOptions,
+      httpOnly: true,
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie('refresh_token', result.refresh_token, {
+      ...cookieOptions,
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    const { refresh_token, access_token, ...safeResult } = result;
+    return safeResult;
+  }
+
   @Public()
   @UseGuards(RefreshAuthGuard)
   @Post('refresh')

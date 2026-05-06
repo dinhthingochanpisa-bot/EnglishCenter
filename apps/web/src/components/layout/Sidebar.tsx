@@ -167,16 +167,18 @@ export const Sidebar: React.FC = () => {
   const { branding } = useTheme();
   const { user, logout, checkPermission } = useAuth();
 
-  const canShowAdminSection = adminMenuItems.some((item) => {
+  const getVisibleItems = (items: MenuItem[]) => items.filter((item) => {
     if (item.permission && !checkPermission(item.permission)) return false;
     if (item.moduleCode && !isModuleEnabled(item.moduleCode)) return false;
     return true;
   });
+  const visibleBusinessItems = getVisibleItems(businessMenuItems);
+  const visibleCommercialItems = getVisibleItems(commercialMenuItems);
+  const visibleAcademicItems = getVisibleItems(academicMenuItems);
+  const visibleAdminItems = getVisibleItems(adminMenuItems);
+  const canShowAdminSection = visibleAdminItems.length > 0;
 
   const renderLink = (item: MenuItem) => {
-    if (item.permission && !checkPermission(item.permission)) return null;
-    if (item.moduleCode && !isModuleEnabled(item.moduleCode)) return null;
-
     const isActive =
       pathname === item.href ||
       (item.href !== '/dashboard' && pathname.startsWith(item.href));
@@ -241,28 +243,34 @@ export const Sidebar: React.FC = () => {
       </div>
 
       <nav className="flex-1 px-4 py-2 space-y-6 overflow-y-auto sidebar-scrollbar">
-        <div className="space-y-1">{businessMenuItems.map(renderLink)}</div>
+        {visibleBusinessItems.length > 0 && (
+          <div className="space-y-1">{visibleBusinessItems.map(renderLink)}</div>
+        )}
 
+        {visibleCommercialItems.length > 0 && (
         <div className="pt-4 border-t border-slate-800/30">
           <p className="px-3 mb-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
             Kinh doanh & Tài chính
           </p>
-          <div className="space-y-1">{commercialMenuItems.map(renderLink)}</div>
+          <div className="space-y-1">{visibleCommercialItems.map(renderLink)}</div>
         </div>
+        )}
 
+        {visibleAcademicItems.length > 0 && (
         <div className="pt-4 border-t border-slate-800/30">
           <p className="px-3 mb-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
             Học thuật & Đào tạo
           </p>
-          <div className="space-y-1">{academicMenuItems.map(renderLink)}</div>
+          <div className="space-y-1">{visibleAcademicItems.map(renderLink)}</div>
         </div>
+        )}
 
         {canShowAdminSection && (
           <div className="pt-4 border-t border-slate-800/30">
             <p className="px-3 mb-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
               Quản trị hệ thống
             </p>
-            <div className="space-y-1">{adminMenuItems.map(renderLink)}</div>
+            <div className="space-y-1">{visibleAdminItems.map(renderLink)}</div>
           </div>
         )}
       </nav>
