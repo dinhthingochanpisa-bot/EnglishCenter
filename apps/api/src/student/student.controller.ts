@@ -39,6 +39,85 @@ import {
 export class StudentController {
   constructor(private prisma: PrismaService) {}
 
+  private normalizeParentRelationship(value?: string | null) {
+    const normalized = String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+
+    if (['bo', 'cha', 'father', 'dad'].includes(normalized)) return 'B\u1ed1';
+    if (['me', 'ma', 'mother', 'mom'].includes(normalized)) return 'M\u1eb9';
+    return 'Ph\u1ee5 huynh';
+  }
+
+  private async upsertSingleParentRelation(
+    studentId: string,
+    parentPayload: any,
+  ) {
+    const relationship = this.normalizeParentRelationship(parentPayload.relationship);
+    const parentPhone = parentPayload.phone?.trim();
+    const parentName = parentPayload.fullName?.trim();
+
+    if (!parentPhone || !parentName) return null;
+
+    const parent = await this.prisma.parent.upsert({
+      where: { phone: parentPhone },
+      update: {
+        fullName: parentName,
+        email: parentPayload.email !== undefined ? parentPayload.email?.trim() || null : undefined,
+        address: parentPayload.address !== undefined ? parentPayload.address?.trim() || null : undefined,
+      },
+      create: {
+        fullName: parentName,
+        phone: parentPhone,
+        email: parentPayload.email?.trim() || null,
+        address: parentPayload.address?.trim() || null,
+      },
+    });
+
+    const relations = await this.prisma.parentStudentRelation.findMany({
+      where: { studentId },
+    });
+
+    const relationWithSameParent = relations.find((item) => item.parentId === parent.id);
+    const relationWithSameRole = relations.find(
+      (item) => this.normalizeParentRelationship(item.relationship) === relationship,
+    );
+    const targetRelation = relationWithSameParent || relationWithSameRole;
+
+    const savedRelation = targetRelation
+      ? await this.prisma.parentStudentRelation.update({
+          where: { id: targetRelation.id },
+          data: {
+            parentId: parent.id,
+            relationship,
+            isPrimaryContact: true,
+          },
+        })
+      : await this.prisma.parentStudentRelation.create({
+          data: {
+            parentId: parent.id,
+            studentId,
+            relationship,
+            isPrimaryContact: true,
+          },
+        });
+
+    const duplicateIds = relations
+      .filter((item) => item.id !== savedRelation.id)
+      .filter((item) => this.normalizeParentRelationship(item.relationship) === relationship)
+      .map((item) => item.id);
+
+    if (duplicateIds.length) {
+      await this.prisma.parentStudentRelation.deleteMany({
+        where: { id: { in: duplicateIds } },
+      });
+    }
+
+    return savedRelation;
+  }
+
   @Get()
   @Permissions('STUDENT.VIEW')
   async findAll(@Request() req: any) {
@@ -155,54 +234,8 @@ export class StudentController {
     });
 
     const parentPayload = body.primaryParent || null;
-    if (parentPayload && (parentPayload.fullName || parentPayload.phone || parentPayload.email || parentPayload.relationship)) {
-      const relation = await this.prisma.parentStudentRelation.findFirst({
-        where: { studentId: id },
-        include: { parent: true },
-        orderBy: [{ isPrimaryContact: 'desc' }],
-      });
-
-      if (relation) {
-        await this.prisma.parent.update({
-          where: { id: relation.parentId },
-          data: {
-            fullName: parentPayload.fullName?.trim() || relation.parent.fullName,
-            phone: parentPayload.phone?.trim() || relation.parent.phone,
-            email: parentPayload.email !== undefined ? parentPayload.email?.trim() || null : undefined,
-            address: parentPayload.address !== undefined ? parentPayload.address?.trim() || null : undefined,
-          },
-        });
-        await this.prisma.parentStudentRelation.update({
-          where: { id: relation.id },
-          data: {
-            relationship: parentPayload.relationship?.trim() || relation.relationship,
-            isPrimaryContact: true,
-          },
-        });
-      } else if (parentPayload.fullName && parentPayload.phone) {
-        const parent = await this.prisma.parent.upsert({
-          where: { phone: parentPayload.phone.trim() },
-          update: {
-            fullName: parentPayload.fullName.trim(),
-            email: parentPayload.email?.trim() || null,
-            address: parentPayload.address?.trim() || null,
-          },
-          create: {
-            fullName: parentPayload.fullName.trim(),
-            phone: parentPayload.phone.trim(),
-            email: parentPayload.email?.trim() || null,
-            address: parentPayload.address?.trim() || null,
-          },
-        });
-        await this.prisma.parentStudentRelation.create({
-          data: {
-            parentId: parent.id,
-            studentId: id,
-            relationship: parentPayload.relationship?.trim() || 'Phụ huynh',
-            isPrimaryContact: true,
-          },
-        });
-      }
+    if (parentPayload && (parentPayload.fullName || parentPayload.phone || parentPayload.relationship)) {
+      await this.upsertSingleParentRelation(id, parentPayload);
     }
 
     await this.prisma.auditLog.create({

@@ -99,13 +99,14 @@ const businessMenuItems: MenuItem[] = [
     moduleCode: 'STUDENT',
     permission: 'STUDENT.VIEW',
   },
-  {
-    title: 'Gia đình',
-    href: '/families',
-    icon: Users,
-    moduleCode: 'FAMILY_PARENT',
-    permission: 'FAMILY_PARENT.VIEW',
-  },
+  // Temporarily hidden. Parent/student relationships are managed from parent and student profiles.
+  // {
+  //   title: 'Gia đình',
+  //   href: '/families',
+  //   icon: Users,
+  //   moduleCode: 'FAMILY_PARENT',
+  //   permission: 'FAMILY_PARENT.VIEW',
+  // },
   {
     title: 'Phụ huynh',
     href: '/parents',

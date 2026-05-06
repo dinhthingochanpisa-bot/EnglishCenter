@@ -486,29 +486,17 @@ export class OpportunityService {
             data: {
               ...studentData,
               code: `HV${Date.now().toString().slice(-6)}`,
-              relations: {
-                create: {
-                  parentId,
-                  familyId,
-                  relationship: parentPayload.relationship || 'Phụ huynh',
-                  isPrimaryContact: true,
-                  isPrimaryPayer: true,
-                },
-              },
             },
           });
 
-      if (existingRelation) {
-        await tx.parentStudentRelation.update({
-          where: { id: existingRelation.id },
-          data: {
-            familyId,
-            relationship: parentPayload.relationship || existingRelation.relationship || 'Phụ huynh',
-            isPrimaryContact: true,
-            isPrimaryPayer: true,
-          },
-        });
-      }
+      await this.upsertSingleParentRelation(
+        tx,
+        student.id,
+        parentId,
+        parentPayload.relationship || existingRelation?.relationship || 'Ph\u1ee5 huynh',
+        familyId,
+        { isPrimaryContact: true, isPrimaryPayer: true },
+      );
 
       const lead = await tx.lead.update({
         where: { id: opp.leadId },
@@ -604,27 +592,92 @@ export class OpportunityService {
     };
 
     if (existingRelation) {
-      return tx.student.update({
+      const student = await tx.student.update({
         where: { id: existingRelation.studentId },
         data: studentData,
       });
+      await this.upsertSingleParentRelation(tx, student.id, parentId, existingRelation.relationship || 'Ph\u1ee5 huynh', familyId, {
+        isPrimaryContact: true,
+        isPrimaryPayer: true,
+      });
+      return student;
     }
 
-    return tx.student.create({
+    const student = await tx.student.create({
       data: {
         ...studentData,
         code: `HV${Date.now().toString().slice(-6)}`,
-        relations: {
-          create: {
-            parentId,
-            familyId,
-            relationship: 'Phụ huynh',
-            isPrimaryContact: true,
-            isPrimaryPayer: true,
-          },
-        },
       },
     });
+    await this.upsertSingleParentRelation(tx, student.id, parentId, 'Ph\u1ee5 huynh', familyId, {
+      isPrimaryContact: true,
+      isPrimaryPayer: true,
+    });
+    return student;
+  }
+
+  private normalizeParentRelationship(value?: string | null) {
+    const normalized = String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+
+    if (['bo', 'cha', 'father', 'dad'].includes(normalized)) return 'B\u1ed1';
+    if (['me', 'ma', 'mother', 'mom'].includes(normalized)) return 'M\u1eb9';
+    return 'Ph\u1ee5 huynh';
+  }
+
+  private async upsertSingleParentRelation(
+    tx: any,
+    studentId: string,
+    parentId: string,
+    relationshipValue?: string | null,
+    familyId?: string | null,
+    flags: { isPrimaryContact?: boolean; isPrimaryPayer?: boolean } = {},
+  ) {
+    const relationship = this.normalizeParentRelationship(relationshipValue);
+    const relations = await tx.parentStudentRelation.findMany({
+      where: { studentId },
+    });
+    const relationWithSameParent = relations.find((item: any) => item.parentId === parentId);
+    const relationWithSameRole = relations.find(
+      (item: any) => this.normalizeParentRelationship(item.relationship) === relationship,
+    );
+    const targetRelation = relationWithSameParent || relationWithSameRole;
+
+    const data = {
+      parentId,
+      familyId: familyId || targetRelation?.familyId || undefined,
+      relationship,
+      isPrimaryContact: Boolean(flags.isPrimaryContact),
+      isPrimaryPayer: Boolean(flags.isPrimaryPayer),
+    };
+
+    const savedRelation = targetRelation
+      ? await tx.parentStudentRelation.update({
+          where: { id: targetRelation.id },
+          data,
+        })
+      : await tx.parentStudentRelation.create({
+          data: {
+            studentId,
+            ...data,
+          },
+        });
+
+    const duplicateIds = relations
+      .filter((item: any) => item.id !== savedRelation.id)
+      .filter((item: any) => this.normalizeParentRelationship(item.relationship) === relationship)
+      .map((item: any) => item.id);
+
+    if (duplicateIds.length) {
+      await tx.parentStudentRelation.deleteMany({
+        where: { id: { in: duplicateIds } },
+      });
+    }
+
+    return savedRelation;
   }
 
   private async findStudentForOpportunity(tx: any, opp: any) {
