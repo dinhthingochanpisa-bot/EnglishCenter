@@ -7,7 +7,13 @@ export interface DashboardSummary {
   totalOutstanding: number;
   activeStudents: number;
   activeClasses: number;
+  refireStudents: number;
   renewalCandidates: number;
+  renewalDueStudents: number;
+  centerCapacityRate: number;
+  scheduleFillRate: number;
+  activeClassCapacity: number;
+  activeClassSeatsFilled: number;
 }
 
 export interface LeadByStage {
@@ -33,6 +39,11 @@ export interface ExecutiveDashboardData {
     contracts: number;
     contractValue: number;
     cashIn: number;
+  }>;
+  examMonthlyTrend: Array<{
+    month: string;
+    realExamStudents: number;
+    mockTestStudents: number;
   }>;
   receivablesByStatus: Array<{
     status: string;

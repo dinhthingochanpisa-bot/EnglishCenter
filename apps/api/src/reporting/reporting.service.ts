@@ -27,7 +27,12 @@ export class ReportingService {
       receivablesByStatusRaw,
       activeStudents,
       activeClasses,
+      refireStudents,
       renewalCandidates,
+      renewalDueContracts,
+      activeClassCapacity,
+      realExamTrendRaw,
+      mockExamTrendRaw,
       centerBreakdown,
     ] = await Promise.all([
       // Total leads
@@ -95,6 +100,10 @@ export class ReportingService {
         where: { ...where, status: 'ACTIVE' },
       }),
 
+      this.prisma.student.count({
+        where: { ...where, status: 'RENEWAL_CANDIDATE' },
+      }),
+
       // Contracts ending in 30 days (renewal candidates)
       this.prisma.contract.count({
         where: {
@@ -102,6 +111,47 @@ export class ReportingService {
           status: 'ACTIVE',
           endDate: { gte: now, lte: thirtyDaysFromNow },
         },
+      }),
+
+      this.prisma.contract.findMany({
+        where: {
+          ...where,
+          status: 'ACTIVE',
+          endDate: { gte: now, lte: thirtyDaysFromNow },
+          renewalsOld: { none: { status: { in: ['PENDING', 'APPROVED'] } } },
+        },
+        select: { studentId: true },
+      }),
+
+      this.prisma.class.findMany({
+        where: { ...where, status: 'ACTIVE' },
+        select: {
+          id: true,
+          capacity: true,
+          schedules: { select: { id: true } },
+          students: {
+            where: { status: 'ACTIVE' },
+            select: { studentId: true },
+          },
+        },
+      }),
+
+      this.prisma.studentExamEvent.findMany({
+        where: {
+          type: 'REAL_EXAM',
+          scheduledAt: { gte: trendStart },
+          student: where,
+        },
+        select: { scheduledAt: true, studentId: true },
+      }),
+
+      this.prisma.studentExamEvent.findMany({
+        where: {
+          type: 'MOCK_TEST',
+          scheduledAt: { gte: trendStart },
+          student: where,
+        },
+        select: { scheduledAt: true, studentId: true },
       }),
 
       // Student distribution by center
@@ -121,6 +171,9 @@ export class ReportingService {
       }),
     ]);
 
+    const capacityStats = this.calculateCapacityStats(activeClassCapacity);
+    const renewalDueStudents = new Set(renewalDueContracts.map((item) => item.studentId)).size;
+
     return {
       summary: {
         leadsTotal,
@@ -129,7 +182,13 @@ export class ReportingService {
         totalOutstanding: Number(totalOutstanding._sum.remainingAmount || 0),
         activeStudents,
         activeClasses,
+        refireStudents,
         renewalCandidates,
+        renewalDueStudents,
+        centerCapacityRate: capacityStats.centerCapacityRate,
+        scheduleFillRate: capacityStats.scheduleFillRate,
+        activeClassCapacity: capacityStats.totalClassCapacity,
+        activeClassSeatsFilled: capacityStats.totalSeatsFilled,
       },
       leadsByStage: leadsByStageRaw.map((s: any) => ({
         stage: s.status,
@@ -149,8 +208,96 @@ export class ReportingService {
         contractsTrendRaw,
         cashTrendRaw,
       ),
+      examMonthlyTrend: this.buildExamMonthlyTrend(
+        trendStart,
+        now,
+        realExamTrendRaw,
+        mockExamTrendRaw,
+      ),
       receivablesByStatus: this.buildReceivableStatus(receivablesByStatusRaw),
     };
+  }
+
+  private calculateCapacityStats(
+    classes: Array<{
+      capacity: number;
+      schedules: Array<{ id: string }>;
+      students: Array<{ studentId: string }>;
+    }>,
+  ) {
+    let totalClassCapacity = 0;
+    let totalSeatsFilled = 0;
+    let totalScheduleCapacity = 0;
+    let totalScheduleSeatsFilled = 0;
+
+    for (const cls of classes) {
+      const capacity = Number(cls.capacity || 0);
+      const filled = cls.students.length;
+      const scheduleCount = Math.max(cls.schedules.length, 1);
+
+      totalClassCapacity += capacity;
+      totalSeatsFilled += filled;
+      totalScheduleCapacity += capacity * scheduleCount;
+      totalScheduleSeatsFilled += filled * scheduleCount;
+    }
+
+    return {
+      totalClassCapacity,
+      totalSeatsFilled,
+      centerCapacityRate: totalClassCapacity
+        ? Math.round((totalSeatsFilled / totalClassCapacity) * 1000) / 10
+        : 0,
+      scheduleFillRate: totalScheduleCapacity
+        ? Math.round((totalScheduleSeatsFilled / totalScheduleCapacity) * 1000) / 10
+        : 0,
+    };
+  }
+
+  private buildExamMonthlyTrend(
+    start: Date,
+    end: Date,
+    realExams: Array<{ scheduledAt: Date; studentId: string }>,
+    mockExams: Array<{ scheduledAt: Date; studentId: string }>,
+  ) {
+    const buckets = new Map<
+      string,
+      { month: string; realExamStudents: number; mockTestStudents: number }
+    >();
+
+    for (
+      let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+      cursor <= end;
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+    ) {
+      const key = this.monthKey(cursor);
+      buckets.set(key, {
+        month: `${String(cursor.getMonth() + 1).padStart(2, '0')}/${cursor.getFullYear()}`,
+        realExamStudents: 0,
+        mockTestStudents: 0,
+      });
+    }
+
+    const realExamStudentsByMonth = new Map<string, Set<string>>();
+    const mockTestStudentsByMonth = new Map<string, Set<string>>();
+
+    for (const exam of realExams) {
+      const key = this.monthKey(exam.scheduledAt);
+      if (!realExamStudentsByMonth.has(key)) realExamStudentsByMonth.set(key, new Set());
+      realExamStudentsByMonth.get(key)?.add(exam.studentId);
+    }
+
+    for (const exam of mockExams) {
+      const key = this.monthKey(exam.scheduledAt);
+      if (!mockTestStudentsByMonth.has(key)) mockTestStudentsByMonth.set(key, new Set());
+      mockTestStudentsByMonth.get(key)?.add(exam.studentId);
+    }
+
+    for (const [key, bucket] of buckets.entries()) {
+      bucket.realExamStudents = realExamStudentsByMonth.get(key)?.size || 0;
+      bucket.mockTestStudents = mockTestStudentsByMonth.get(key)?.size || 0;
+    }
+
+    return [...buckets.values()];
   }
 
   private buildMonthlyTrend(

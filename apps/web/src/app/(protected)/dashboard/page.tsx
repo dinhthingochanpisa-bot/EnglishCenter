@@ -11,7 +11,9 @@ import {
   DollarSign,
   FileText,
   GraduationCap,
+  Gauge,
   Radio,
+  CalendarCheck,
   Target,
   TrendingUp,
   Users,
@@ -69,12 +71,19 @@ export default function DashboardPage() {
     const rows = [
       ['Nhóm', 'Chỉ số', 'Giá trị'],
       ['Tổng quan', 'Học sinh đang học', String(summary?.activeStudents || 0)],
+      ['Tổng quan', 'Lớp đang active', String(summary?.activeClasses || 0)],
+      ['Tổng quan', 'Học sinh refire', String(summary?.refireStudents || 0)],
+      ['Tổng quan', 'Học sinh đến hạn tái phí', String(summary?.renewalDueStudents || 0)],
       ['Tổng quan', 'Tổng lead', String(summary?.leadsTotal || 0)],
+      ['Tổng quan', 'Hợp đồng mới tháng này', String(summary?.contractsThisMonth || 0)],
       ['Tổng quan', 'Doanh thu tháng này', String(summary?.cashInThisMonth || 0)],
       ['Tổng quan', 'Công nợ hiện tại', String(summary?.totalOutstanding || 0)],
+      ['Tổng quan', 'Công suất trung tâm', `${summary?.centerCapacityRate || 0}%`],
+      ['Tổng quan', 'Tỷ lệ lấp đầy ca học', `${summary?.scheduleFillRate || 0}%`],
       ['Tổng quan', 'Hợp đồng cần gia hạn', String(summary?.renewalCandidates || 0)],
       ...data.leadsByStage.map((item) => ['Lead theo trạng thái', item.stage, String(item.count)]),
       ...data.monthlyTrend.map((item) => ['Xu hướng tháng', item.month, String(item.cashIn)]),
+      ...data.examMonthlyTrend.map((item) => ['Lịch thi theo tháng', item.month, `Thi thật: ${item.realExamStudents}; Mock: ${item.mockTestStudents}`]),
       ...data.centerBreakdown.flatMap((center) => [
         [`Chi nhánh ${center.code}`, 'Tên trung tâm', center.name],
         [`Chi nhánh ${center.code}`, 'Học sinh đang học', String(center.activeStudents)],
@@ -109,6 +118,27 @@ export default function DashboardPage() {
       description: `${formatNumber(summary?.activeClasses || 0)} lớp đang hoạt động`,
     },
     {
+      title: 'Lớp active',
+      value: formatNumber(summary?.activeClasses || 0),
+      icon: GraduationCap,
+      variant: 'primary',
+      description: `${formatNumber(summary?.activeClassSeatsFilled || 0)}/${formatNumber(summary?.activeClassCapacity || 0)} chỗ đã lấp`,
+    },
+    {
+      title: 'HS refire',
+      value: formatNumber(summary?.refireStudents || 0),
+      icon: TrendingUp,
+      variant: 'warning',
+      description: 'Học sinh trạng thái RENEWAL_CANDIDATE',
+    },
+    {
+      title: 'Đến hạn tái phí',
+      value: formatNumber(summary?.renewalDueStudents || 0),
+      icon: Clock,
+      variant: 'warning',
+      description: `${formatNumber(summary?.renewalCandidates || 0)} hợp đồng hết hạn trong 30 ngày`,
+    },
+    {
       title: 'Tiềm năng hệ thống',
       value: formatNumber(summary?.leadsTotal || 0),
       icon: Target,
@@ -116,18 +146,32 @@ export default function DashboardPage() {
       description: `${formatNumber(totalPipeline)} lead trong pipeline`,
     },
     {
-      title: 'Doanh thu tháng này',
+      title: 'HĐ mới tháng này',
+      value: formatNumber(summary?.contractsThisMonth || 0),
+      icon: FileText,
+      variant: 'info',
+      description: `Doanh thu ${formatCurrency(summary?.cashInThisMonth || 0)}`,
+    },
+    {
+      title: 'Doanh thu',
       value: formatCurrency(summary?.cashInThisMonth || 0),
       icon: DollarSign,
       variant: 'info',
-      description: `${formatNumber(summary?.contractsThisMonth || 0)} hợp đồng mới`,
+      description: 'Dòng tiền đã thu trong tháng',
     },
     {
-      title: 'Công nợ hiện tại',
+      title: 'Công nợ',
       value: formatCurrency(summary?.totalOutstanding || 0),
       icon: AlertCircle,
       variant: 'warning',
-      description: `${formatNumber(summary?.renewalCandidates || 0)} hợp đồng cần gia hạn`,
+      description: 'Tổng khoản phải thu còn mở',
+    },
+    {
+      title: 'Công suất trung tâm',
+      value: formatPercent(summary?.centerCapacityRate || 0),
+      icon: Gauge,
+      variant: 'success',
+      description: `Ca học lấp đầy ${formatPercent(summary?.scheduleFillRate || 0)}`,
     },
   ];
 
@@ -165,6 +209,27 @@ export default function DashboardPage() {
 
         <Card className="xl:col-span-4" title="Phễu tiềm năng" subtitle="Tỷ trọng lead theo trạng thái">
           <PipelineDonut data={data?.leadsByStage || []} />
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
+        <Card className="xl:col-span-7" title="Lịch thi theo tháng" subtitle="Số học sinh có lịch thi thật và mock test trong 6 tháng">
+          <ExamMonthlyChart data={data?.examMonthlyTrend || []} />
+        </Card>
+
+        <Card className="xl:col-span-5" title="Công suất vận hành" subtitle="Sĩ số lớp ACTIVE so với capacity đã cấu hình">
+          <div className="space-y-5">
+            <CapacityGauge
+              label="Công suất trung tâm"
+              value={summary?.centerCapacityRate || 0}
+              detail={`${formatNumber(summary?.activeClassSeatsFilled || 0)}/${formatNumber(summary?.activeClassCapacity || 0)} chỗ đã lấp`}
+            />
+            <CapacityGauge
+              label="Tỷ lệ lấp đầy ca học"
+              value={summary?.scheduleFillRate || 0}
+              detail="Tính theo capacity của các ca thuộc lớp ACTIVE"
+            />
+          </div>
         </Card>
       </div>
 
@@ -476,6 +541,73 @@ function ReceivableChart({ data }: { data: ExecutiveDashboardData['receivablesBy
   );
 }
 
+function ExamMonthlyChart({ data }: { data: ExecutiveDashboardData['examMonthlyTrend'] }) {
+  const maxValue = Math.max(
+    ...data.map((item) => Math.max(item.realExamStudents, item.mockTestStudents)),
+    1,
+  );
+
+  if (!data.length) {
+    return <EmptyState title="Chưa có lịch thi" description="Lịch thi thật và mock test sẽ hiển thị khi được tạo trong hồ sơ học sinh." icon={CalendarCheck} />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-3 text-xs font-semibold text-slate-500">
+        <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-rose-500" /> Thi thật</span>
+        <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-primary" /> Mock test</span>
+      </div>
+      <div className="grid h-[260px] grid-cols-6 items-end gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+        {data.map((item) => (
+          <div key={item.month} className="group relative flex h-full min-w-0 flex-col justify-end gap-2">
+            <div className="flex min-h-0 flex-1 items-end justify-center gap-1.5">
+              <div
+                className="w-4 rounded-t-md bg-rose-500"
+                style={{ height: `${Math.max((item.realExamStudents / maxValue) * 100, item.realExamStudents ? 8 : 0)}%` }}
+              />
+              <div
+                className="w-4 rounded-t-md bg-primary"
+                style={{ height: `${Math.max((item.mockTestStudents / maxValue) * 100, item.mockTestStudents ? 8 : 0)}%` }}
+              />
+            </div>
+            <p className="truncate text-center text-[10px] font-bold text-slate-400">{item.month}</p>
+            <ChartTooltip className="bottom-full left-1/2 mb-2 -translate-x-1/2">
+              <p className="font-bold text-white">{item.month}</p>
+              <p>Thi thật: {item.realExamStudents} học sinh</p>
+              <p>Mock test: {item.mockTestStudents} học sinh</p>
+            </ChartTooltip>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CapacityGauge({ label, value, detail }: { label: string; value: number; detail: string }) {
+  const normalized = Math.max(0, Math.min(value, 100));
+
+  return (
+    <div className="rounded-xl border border-slate-100 bg-white p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-bold text-slate-900">{label}</p>
+          <p className="mt-1 text-xs text-slate-500">{detail}</p>
+        </div>
+        <span className="text-2xl font-black text-slate-900">{formatPercent(value)}</span>
+      </div>
+      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={clsx(
+            'h-full rounded-full',
+            normalized >= 85 ? 'bg-emerald-500' : normalized >= 60 ? 'bg-primary' : 'bg-amber-500',
+          )}
+          style={{ width: `${normalized}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function MetricBar({ label, value, max, color, detail }: { label: string; value: number; max: number; color: string; detail: string }) {
   return (
     <div className="group relative mt-3">
@@ -534,6 +666,10 @@ function formatNumber(value: number) {
 
 function formatCurrency(value: number) {
   return `${value.toLocaleString('vi-VN')} ₫`;
+}
+
+function formatPercent(value: number) {
+  return `${value.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%`;
 }
 
 function compactCurrency(value: number) {
