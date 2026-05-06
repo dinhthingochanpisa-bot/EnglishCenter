@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
@@ -267,6 +267,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
     discountSegmentCode: '',
     promotionCodes: [],
   });
+  const lastPricingKeyRef = useRef('');
   const [salesHandover, setSalesHandover] = useState<SalesHandover | null>(null);
   const [issueForm, setIssueForm] = useState({
     type: 'OBJECTION',
@@ -308,7 +309,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
         setSalesHandover(null);
       }
       if (classOpportunity?.id) {
-        apiFetch<Array<{ id: string; name: string; code: string; centerId: string; program?: { name?: string } }>>(
+        apiFetch<Array<{ id: string; name: string; code: string; centerId: string; center?: { code?: string; name?: string }; program?: { name?: string } }>>(
           `/opportunities/${classOpportunity.id}/classes`,
         )
           .then(setClasses)
@@ -395,7 +396,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
       setShowEditLeadModal(false);
       await fetchLead();
     } catch (err: any) {
-      setError(err.message || 'Khong the cap nhat thong tin lead');
+      setError(err.message || 'Không thể cập nhật thông tin tiềm năng');
     } finally {
       setIsSaving(false);
     }
@@ -837,7 +838,15 @@ export default function LeadDetailClient({ id }: { id: string }) {
 
     const nextUnitPrice = String(Number(selectedPricing.unitPrice || 0));
     const hasFeePackage = Boolean(wonForm.feePackage);
-    const nextSessions = hasFeePackage
+    const pricingKey = [
+      selectedPricing.product,
+      selectedPricing.rank,
+      selectedPricing.feePackage,
+    ].join('|');
+    const shouldAutofillSessions =
+      hasFeePackage &&
+      (pricingKey !== lastPricingKeyRef.current || !wonForm.contractedSessions);
+    const nextSessions = shouldAutofillSessions
       ? String(sessionCountFromPackage(selectedPricing.feePackage))
       : wonForm.contractedSessions;
     const nextDiscountPercent = hasFeePackage
@@ -848,6 +857,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
       : wonForm.amount;
 
     setWonForm((current) => {
+      lastPricingKeyRef.current = pricingKey;
       if (
         current.unitPrice === nextUnitPrice &&
         current.contractedSessions === nextSessions &&
@@ -982,7 +992,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={openEditLeadModal} disabled={isSaving}>
-              <Pencil size={18} className="mr-2" /> Chinh sua thong tin
+              <Pencil size={18} className="mr-2" /> Chỉnh sửa thông tin
             </Button>
             <Button variant="secondary" onClick={openCreateInteractionModal}>
               <PlusCircle size={18} className="mr-2" /> Ghi nhận tương tác
@@ -1403,7 +1413,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-slate-400">Chua co khuyen mai active.</p>
+                      <p className="text-sm text-slate-400">Chưa có khuyến mãi đang áp dụng.</p>
                     )}
                   </div>
                   <div className="rounded-lg border border-indigo-100 bg-white p-4 text-sm">
@@ -1414,7 +1424,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
                           {formatMoney(configuredFinalAmount)}
                         </p>
                       </div>
-                      {isWonQuoteLoading ? <span className="text-slate-400">Dang tinh...</span> : null}
+                      {isWonQuoteLoading ? <span className="text-slate-400">Đang tính...</span> : null}
                     </div>
                     {wonQuoteError ? (
                       <p className="mt-2 text-red-600">{wonQuoteError}</p>
@@ -1745,29 +1755,29 @@ export default function LeadDetailClient({ id }: { id: string }) {
       </div>
 
       {showEditLeadModal && (
-        <Modal title="Chinh sua thong tin lead" onClose={() => setShowEditLeadModal(false)}>
+        <Modal title="Chỉnh sửa thông tin tiềm năng" onClose={() => setShowEditLeadModal(false)}>
           <form onSubmit={handleUpdateLeadInfo} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <LabeledInput label="Ho ten phu huynh" value={leadEditForm.parentName} onChange={(value) => setLeadEditForm((form) => ({ ...form, parentName: value }))} required />
-              <LabeledInput label="SDT phu huynh" value={leadEditForm.phone} onChange={(value) => setLeadEditForm((form) => ({ ...form, phone: value }))} required />
+              <LabeledInput label="Họ tên phụ huynh" value={leadEditForm.parentName} onChange={(value) => setLeadEditForm((form) => ({ ...form, parentName: value }))} required />
+              <LabeledInput label="SĐT phụ huynh" value={leadEditForm.phone} onChange={(value) => setLeadEditForm((form) => ({ ...form, phone: value }))} required />
               <LabeledInput label="Email" value={leadEditForm.email} onChange={(value) => setLeadEditForm((form) => ({ ...form, email: value }))} />
-              <LabeledInput label="Dia chi" value={leadEditForm.address} onChange={(value) => setLeadEditForm((form) => ({ ...form, address: value }))} />
-              <LabeledInput label="Ho ten hoc sinh" value={leadEditForm.prospectiveStudentName} onChange={(value) => setLeadEditForm((form) => ({ ...form, prospectiveStudentName: value }))} />
-              <LabeledInput label="SDT hoc sinh" value={leadEditForm.studentPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, studentPhone: value }))} />
+              <LabeledInput label="Địa chỉ" value={leadEditForm.address} onChange={(value) => setLeadEditForm((form) => ({ ...form, address: value }))} />
+              <LabeledInput label="Họ tên học sinh" value={leadEditForm.prospectiveStudentName} onChange={(value) => setLeadEditForm((form) => ({ ...form, prospectiveStudentName: value }))} />
+              <LabeledInput label="SĐT học sinh" value={leadEditForm.studentPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, studentPhone: value }))} />
               <LabeledInput label="San pham" value={leadEditForm.productInterest} onChange={(value) => setLeadEditForm((form) => ({ ...form, productInterest: value }))} />
-              <LabeledInput label="Truong" value={leadEditForm.school} onChange={(value) => setLeadEditForm((form) => ({ ...form, school: value }))} />
-              <LabeledInput label="Lop/Khoi" value={leadEditForm.grade} onChange={(value) => setLeadEditForm((form) => ({ ...form, grade: value }))} />
-              <LabeledInput label="Muc tieu" value={leadEditForm.target} onChange={(value) => setLeadEditForm((form) => ({ ...form, target: value }))} />
-              <LabeledInput label="Ten bo" value={leadEditForm.fatherName} onChange={(value) => setLeadEditForm((form) => ({ ...form, fatherName: value }))} />
-              <LabeledInput label="SDT bo" value={leadEditForm.fatherPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, fatherPhone: value }))} />
-              <LabeledInput label="Ten me" value={leadEditForm.motherName} onChange={(value) => setLeadEditForm((form) => ({ ...form, motherName: value }))} />
-              <LabeledInput label="SDT me" value={leadEditForm.motherPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, motherPhone: value }))} />
+              <LabeledInput label="Trường" value={leadEditForm.school} onChange={(value) => setLeadEditForm((form) => ({ ...form, school: value }))} />
+              <LabeledInput label="Lớp/Khối" value={leadEditForm.grade} onChange={(value) => setLeadEditForm((form) => ({ ...form, grade: value }))} />
+              <LabeledInput label="Mục tiêu" value={leadEditForm.target} onChange={(value) => setLeadEditForm((form) => ({ ...form, target: value }))} />
+              <LabeledInput label="Tên bố" value={leadEditForm.fatherName} onChange={(value) => setLeadEditForm((form) => ({ ...form, fatherName: value }))} />
+              <LabeledInput label="SĐT bố" value={leadEditForm.fatherPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, fatherPhone: value }))} />
+              <LabeledInput label="Tên mẹ" value={leadEditForm.motherName} onChange={(value) => setLeadEditForm((form) => ({ ...form, motherName: value }))} />
+              <LabeledInput label="SĐT mẹ" value={leadEditForm.motherPhone} onChange={(value) => setLeadEditForm((form) => ({ ...form, motherPhone: value }))} />
             </div>
             <div>
-              <label className="text-sm text-slate-500">Ghi chu</label>
+              <label className="text-sm text-slate-500">Ghi chú</label>
               <textarea className="mt-1 min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={leadEditForm.notes} onChange={(event) => setLeadEditForm((form) => ({ ...form, notes: event.target.value }))} />
             </div>
-            <ModalActions isSaving={isSaving} onCancel={() => setShowEditLeadModal(false)} submitLabel="Luu thong tin" />
+            <ModalActions isSaving={isSaving} onCancel={() => setShowEditLeadModal(false)} submitLabel="Lưu thông tin" />
           </form>
         </Modal>
       )}
@@ -2004,11 +2014,11 @@ function ClassSelect({
   classes,
   onChange,
   required,
-  emptyLabel = 'Chon lop',
+  emptyLabel = 'Chọn lớp',
 }: {
   label: string;
   value: string;
-  classes: Array<{ id: string; name: string; code: string; program?: { name?: string } }>;
+  classes: Array<{ id: string; name: string; code: string; center?: { code?: string; name?: string }; program?: { name?: string } }>;
   onChange: (value: string) => void;
   required?: boolean;
   emptyLabel?: string;
@@ -2025,7 +2035,7 @@ function ClassSelect({
         <option value="">{emptyLabel}</option>
         {classes.map((item) => (
           <option key={item.id} value={item.id}>
-            {item.code} - {item.name}{item.program?.name ? ` (${item.program.name})` : ''}
+            {item.center?.code ? `${item.center.code} - ` : ''}{item.code} - {item.name}{item.program?.name ? ` (${item.program.name})` : ''}
           </option>
         ))}
       </select>

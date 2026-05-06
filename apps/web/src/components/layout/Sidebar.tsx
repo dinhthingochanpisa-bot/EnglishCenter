@@ -79,14 +79,14 @@ const commercialMenuItems: MenuItem[] = [
 
 const businessMenuItems: MenuItem[] = [
   { 
-    title: 'Dashboard', 
+    title: 'Tổng quan',
     href: '/dashboard', 
     icon: LayoutDashboard,
     moduleCode: 'REPORTING',
     permission: 'REPORTING.VIEW'
   },
   {
-    title: 'Leads',
+    title: 'Tiềm năng',
     href: '/leads',
     icon: Target,
     moduleCode: 'CRM_LEADS',
@@ -99,7 +99,7 @@ const businessMenuItems: MenuItem[] = [
     moduleCode: 'STUDENT',
     permission: 'STUDENT.VIEW',
   },
-  // Temporarily hidden. Parent/student relationships are managed from parent and student profiles.
+  // Tạm ẩn màn Gia đình. Quan hệ phụ huynh/học sinh được quản lý trong hồ sơ tương ứng.
   // {
   //   title: 'Gia đình',
   //   href: '/families',
@@ -235,7 +235,7 @@ export const Sidebar: React.FC = () => {
       <div className="px-6 mb-4">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/50 border border-slate-800 rounded-md text-slate-500 group hover:border-slate-700 transition-colors cursor-pointer">
           <Search size={14} className="group-hover:text-slate-400" />
-          <span className="text-[11px] font-medium">Quick search...</span>
+          <span className="text-[11px] font-medium">Tìm kiếm nhanh...</span>
           <span className="ml-auto text-[9px] bg-slate-800 px-1 rounded border border-slate-700 font-mono">/</span>
         </div>
       </div>
@@ -274,16 +274,16 @@ export const Sidebar: React.FC = () => {
           </div>
           <div className="flex-1 overflow-hidden">
             <p className="text-sm font-semibold truncate text-slate-200">
-              {user?.fullName || 'User'}
+              {user?.fullName || 'Người dùng'}
             </p>
             <p className="text-[10px] text-slate-500 truncate uppercase font-bold tracking-tighter">
-              {user?.role?.replace('_', ' ') || 'Guest'}
+              {user?.role?.replace('_', ' ') || 'Khách'}
             </p>
           </div>
           <button
             onClick={() => logout()}
             className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-            title="Logout"
+            title="Đăng xuất"
           >
             <LogOut size={16} />
           </button>

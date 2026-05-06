@@ -47,15 +47,23 @@ export class OpportunityService {
     if (!opp) throw new NotFoundException('Opportunity not found');
     CenterScope.validate(user, opp.lead.centerId);
 
+    const classWhere =
+      user.role === 'SUPER_ADMIN'
+        ? {}
+        : { centerId: { in: user.allowedCenterIds || [] } };
+
     return this.prisma.class.findMany({
-      where: { centerId: opp.lead.centerId },
+      where: {
+        ...classWhere,
+        status: 'ACTIVE',
+      },
       include: {
         program: true,
         center: { select: { id: true, name: true, code: true } },
         teacher: { select: { id: true, fullName: true } },
         _count: { select: { students: true } },
       },
-      orderBy: { code: 'asc' },
+      orderBy: [{ center: { code: 'asc' } }, { code: 'asc' }],
     });
   }
 
@@ -585,7 +593,7 @@ export class OpportunityService {
       fullName: studentName,
       birthday: studentPayload.birthday ? new Date(studentPayload.birthday) : undefined,
       gender: studentPayload.gender || undefined,
-      centerId: opp.lead.centerId,
+      centerId: studentPayload.centerId || opp.lead.centerId,
       target: studentPayload.target?.trim() || opp.lead.target || undefined,
       notes: studentPayload.notes?.trim() || undefined,
       status,
@@ -884,10 +892,23 @@ export class OpportunityService {
         planId = plan?.id || null;
       }
 
+      const selectedClass = payload.classId
+        ? await tx.class.findUnique({
+            where: { id: payload.classId },
+            include: { _count: { select: { students: true } } },
+          })
+        : null;
+      if (payload.classId && !selectedClass) throw new NotFoundException('Class not found');
+      if (selectedClass && selectedClass._count.students >= selectedClass.capacity) {
+        throw new BadRequestException('Lớp đã đủ sĩ số');
+      }
+
+      const targetCenterId = selectedClass?.centerId || opp.lead.centerId;
+
       const student = await this.ensureStudentFromOpportunity(
         tx,
         opp,
-        { fullName: payload.studentName },
+        { fullName: payload.studentName, centerId: targetCenterId },
         waitForClass ? StudentStatus.PENDING : StudentStatus.ACTIVE,
       );
       await this.syncLatestPlacementResult(tx, opp.leadId, student.id);
@@ -897,17 +918,17 @@ export class OpportunityService {
             tx,
             student.id,
             payload.classId,
-            opp.lead.centerId,
+            targetCenterId,
             'ACTIVE',
           );
 
       // --- 2. Create Contract ---
-      const contractCode = await this.contractService.generateContractCode(opp.lead.centerId, tx);
+      const contractCode = await this.contractService.generateContractCode(targetCenterId, tx);
       const contract = await tx.contract.create({
         data: {
           code: contractCode,
           studentId: student.id,
-          centerId: opp.lead.centerId,
+          centerId: targetCenterId,
           ownerId: opp.lead.ownerId,
           listPrice: quote.listPrice,
           discountPercent: quote.discountPercent,
@@ -957,7 +978,7 @@ export class OpportunityService {
       });
       await tx.lead.update({
         where: { id: opp.leadId },
-        data: { status: 'CONVERTED' },
+        data: { status: 'CONVERTED', centerId: targetCenterId },
       });
 
       const handover = await tx.salesHandover.upsert({
@@ -968,7 +989,7 @@ export class OpportunityService {
           studentId: student.id,
           contractId: contract.id,
           classId: cls?.id || null,
-          centerId: opp.lead.centerId,
+          centerId: targetCenterId,
           ownerId: opp.lead.ownerId,
           profileConfirmed: true,
           scheduleConfirmed: Boolean(cls),

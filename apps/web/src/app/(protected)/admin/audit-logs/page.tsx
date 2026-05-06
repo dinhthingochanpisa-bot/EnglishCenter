@@ -95,12 +95,12 @@ export default function AuditLogsPage() {
               className="w-full h-10 px-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-slate-700"
             >
               <option value="">Tất cả thực thể</option>
-              <option value="Lead">Lead</option>
-              <option value="Contract">Contract</option>
-              <option value="Payment">Payment</option>
-              <option value="Student">Student</option>
-              <option value="Class">Class</option>
-              <option value="User">User</option>
+              <option value="Lead">Tiềm năng</option>
+              <option value="Contract">Hợp đồng</option>
+              <option value="Payment">Thanh toán</option>
+              <option value="Student">Học sinh</option>
+              <option value="Class">Lớp học</option>
+              <option value="User">Người dùng</option>
             </select>
           </div>
 
@@ -287,4 +287,3 @@ const AlertCircle = ({ size, className }: { size: number, className?: string }) 
 function clsx(...classes: any[]) {
   return classes.filter(Boolean).join(' ');
 }
-

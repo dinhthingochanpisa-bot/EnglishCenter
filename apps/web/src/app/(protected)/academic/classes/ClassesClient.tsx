@@ -86,7 +86,7 @@ export default function ClassesClient() {
       });
       await fetchClasses();
     } catch (err: any) {
-      setError(err.message || 'Khong the mo lop moi');
+      setError(err.message || 'Không thể mở lớp mới');
     } finally {
       setIsSaving(false);
     }
@@ -100,6 +100,16 @@ export default function ClassesClient() {
       case 'CANCELLED': return 'error';
       default: return 'secondary';
     }
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      PLANNING: 'Đang lên kế hoạch',
+      ACTIVE: 'Đang học',
+      FINISHED: 'Đã kết thúc',
+      CANCELLED: 'Đã hủy',
+    };
+    return labels[status] || status;
   };
 
   const filteredData = data.filter(cls => 
@@ -158,7 +168,7 @@ export default function ClassesClient() {
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-slate-900 group-hover:text-primary transition-colors">{cls.name}</h3>
                         <Badge variant={getStatusColor(cls.status)} className="text-[10px] py-0">
-                          {cls.status}
+                          {getStatusLabel(cls.status)}
                         </Badge>
                       </div>
                       <p className="text-xs font-mono text-slate-400 uppercase">{cls.code}</p>
@@ -204,54 +214,54 @@ export default function ClassesClient() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
             <form onSubmit={handleCreateClass} className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
               <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                <h2 className="text-lg font-bold text-slate-900">Mo lop moi</h2>
+                <h2 className="text-lg font-bold text-slate-900">Mở lớp mới</h2>
                 <button type="button" onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-700">
                   <X size={20} />
                 </button>
               </div>
               <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
                 <label className="text-sm text-slate-600">
-                  Ten lop *
+                  Tên lớp *
                   <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.name} onChange={(event) => setClassForm((form) => ({ ...form, name: event.target.value }))} required />
                 </label>
                 <label className="text-sm text-slate-600">
-                  Ma lop
-                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.code} onChange={(event) => setClassForm((form) => ({ ...form, code: event.target.value }))} placeholder="Tu sinh neu de trong" />
+                  Mã lớp
+                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.code} onChange={(event) => setClassForm((form) => ({ ...form, code: event.target.value }))} placeholder="Tự sinh nếu để trống" />
                 </label>
                 <label className="text-sm text-slate-600">
-                  Chuong trinh *
+                  Chương trình *
                   <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.programId} onChange={(event) => setClassForm((form) => ({ ...form, programId: event.target.value }))} required>
-                    <option value="">Chon chuong trinh</option>
+                    <option value="">Chọn chương trình</option>
                     {programs.map((program: any) => (
                       <option key={program.id} value={program.id}>{program.product?.name ? `${program.product.name} - ` : ''}{program.name}</option>
                     ))}
                   </select>
                 </label>
                 <label className="text-sm text-slate-600">
-                  Trung tam *
+                  Trung tâm *
                   <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.centerId} onChange={(event) => setClassForm((form) => ({ ...form, centerId: event.target.value }))} required>
-                    <option value="">Chon trung tam</option>
+                    <option value="">Chọn trung tâm</option>
                     {centers.map((center: any) => (
                       <option key={center.id} value={center.id}>{center.code} - {center.name}</option>
                     ))}
                   </select>
                 </label>
                 <label className="text-sm text-slate-600">
-                  Si so toi da
+                  Sĩ số tối đa
                   <input type="number" min="1" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.capacity} onChange={(event) => setClassForm((form) => ({ ...form, capacity: event.target.value }))} />
                 </label>
                 <label className="text-sm text-slate-600">
-                  Trang thai
+                  Trạng thái
                   <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={classForm.status} onChange={(event) => setClassForm((form) => ({ ...form, status: event.target.value }))}>
-                    <option value="PLANNING">PLANNING</option>
-                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="PLANNING">Đang lên kế hoạch</option>
+                    <option value="ACTIVE">Đang học</option>
                   </select>
                 </label>
               </div>
               <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-                <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>Huy</Button>
+                <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>Hủy</Button>
                 <Button type="submit" disabled={isSaving || !classForm.name || !classForm.programId || !classForm.centerId}>
-                  {isSaving ? 'Dang luu...' : 'Mo lop'}
+                  {isSaving ? 'Đang lưu...' : 'Mở lớp'}
                 </Button>
               </div>
             </form>

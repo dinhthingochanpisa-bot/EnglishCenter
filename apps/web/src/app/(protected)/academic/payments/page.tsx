@@ -281,7 +281,7 @@ export default function PaymentsPage() {
                         <div className="text-sm font-bold text-slate-800">{option.label}</div>
                         <div className="mt-0.5 text-xs text-slate-500">{option.subLabel}</div>
                         <div className="mt-1 text-xs font-semibold text-red-500">
-                          Con no: {option.amount ? `${Number(option.amount).toLocaleString()} ₫` : 'Chua co goi y'}
+                          Còn nợ: {option.amount ? `${Number(option.amount).toLocaleString()} ₫` : 'Chưa có gợi ý'}
                         </div>
                       </button>
                     ))}
@@ -291,7 +291,7 @@ export default function PaymentsPage() {
               {selectedContractOption && (
                 <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm md:grid-cols-2">
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-slate-400">Hoc sinh</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Học sinh</p>
                     <p className="font-semibold text-slate-800">{selectedContractOption.student?.fullName || 'N/A'}</p>
                     <p className="text-xs text-slate-500">{selectedContractOption.student?.code || ''}</p>
                   </div>
@@ -308,11 +308,11 @@ export default function PaymentsPage() {
                   <div>
                     <p className="text-[10px] font-bold uppercase text-slate-400">Con no</p>
                     <p className="font-bold text-red-500">
-                      {selectedContractOption.amount ? `${Number(selectedContractOption.amount).toLocaleString()} ₫` : 'Chua co goi y'}
+                      {selectedContractOption.amount ? `${Number(selectedContractOption.amount).toLocaleString()} ₫` : 'Chưa có gợi ý'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-slate-400">Trung tam</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Trung tâm</p>
                     <p className="font-semibold text-slate-800">{selectedContractOption.contract?.center?.name || 'N/A'}</p>
                   </div>
                   <div>

@@ -9,7 +9,7 @@ import { apiFetch } from '@/lib/api';
 export function AuditTrail({
   entityType,
   entityId,
-  title = 'Lich su chinh sua',
+  title = 'Lịch sử chỉnh sửa',
 }: {
   entityType: string;
   entityId: string;
@@ -46,7 +46,7 @@ export function AuditTrail({
         <Badge variant="outline">{items.length}</Badge>
       </div>
       {isLoading ? (
-        <p className="py-6 text-center text-sm text-slate-400">Dang tai lich su...</p>
+        <p className="py-6 text-center text-sm text-slate-400">Đang tải lịch sử...</p>
       ) : items.length ? (
         <div className="space-y-3">
           {items.map((item) => (
@@ -55,7 +55,7 @@ export function AuditTrail({
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">{item.action}</Badge>
                   <span className="text-sm font-semibold text-slate-800">
-                    {item.actor?.fullName || item.actor?.email || 'Tai khoan he thong'}
+                    {item.actor?.fullName || item.actor?.email || 'Tài khoản hệ thống'}
                   </span>
                 </div>
                 <span className="flex items-center gap-1 text-xs text-slate-500">
@@ -67,7 +67,7 @@ export function AuditTrail({
           ))}
         </div>
       ) : (
-        <p className="py-6 text-center text-sm text-slate-400">Chua co lich su chinh sua.</p>
+        <p className="py-6 text-center text-sm text-slate-400">Chưa có lịch sử chỉnh sửa.</p>
       )}
     </Card>
   );

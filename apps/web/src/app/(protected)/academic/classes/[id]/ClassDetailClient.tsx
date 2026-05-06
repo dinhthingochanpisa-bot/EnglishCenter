@@ -79,7 +79,7 @@ export default function ClassDetailClient({ id }: { id: string }) {
       setAvailableStudents([]);
       notify({
         type: 'error',
-        title: 'Khong the tai danh sach hoc sinh',
+        title: 'Không thể tải danh sách học sinh',
         message: err.message,
       });
     }
@@ -110,9 +110,9 @@ export default function ClassDetailClient({ id }: { id: string }) {
       });
       setShowEditModal(false);
       await fetchData();
-      notify({ type: 'success', title: 'Da cap nhat thong tin lop' });
+      notify({ type: 'success', title: 'Đã cập nhật thông tin lớp' });
     } catch (err: any) {
-      notify({ type: 'error', title: 'Khong the cap nhat lop', message: err.message });
+      notify({ type: 'error', title: 'Không thể cập nhật lớp', message: err.message });
     } finally {
       setIsSaving(false);
     }
@@ -130,11 +130,11 @@ export default function ClassDetailClient({ id }: { id: string }) {
       });
       setShowEnrollModal(false);
       await fetchData();
-      notify({ type: 'success', title: 'Da them hoc sinh vao lop' });
+      notify({ type: 'success', title: 'Đã thêm học sinh vào lớp' });
     } catch (err: any) {
       notify({
         type: 'error',
-        title: 'Khong the them hoc sinh',
+        title: 'Không thể thêm học sinh',
         message: err.message,
       });
     } finally {
@@ -147,11 +147,11 @@ export default function ClassDetailClient({ id }: { id: string }) {
     try {
       await apiFetch(`/academic/classes/${id}/unenroll/${studentId}`, { method: 'DELETE' });
       await fetchData();
-      notify({ type: 'success', title: 'Da xoa hoc sinh khoi lop' });
+      notify({ type: 'success', title: 'Đã xóa học sinh khỏi lớp' });
     } catch (err: any) {
       notify({
         type: 'error',
-        title: 'Khong the xoa hoc sinh',
+        title: 'Không thể xóa học sinh',
         message: err.message,
       });
     } finally {
@@ -209,13 +209,13 @@ export default function ClassDetailClient({ id }: { id: string }) {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900">{data.name}</h1>
-            <Badge variant="success">{data.status}</Badge>
+            <Badge variant="success">{getClassStatusLabel(data.status)}</Badge>
           </div>
           <p className="text-sm text-slate-500 font-medium">{data.program?.name} • {data.code}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={openEditModal}>
-            <Pencil size={18} /> Chinh sua
+            <Pencil size={18} /> Chỉnh sửa
           </Button>
         </div>
       </div>
@@ -345,7 +345,7 @@ export default function ClassDetailClient({ id }: { id: string }) {
                     </td>
                     <td className="px-6 py-4 text-xs font-mono text-slate-500 uppercase">{s.student.code}</td>
                     <td className="px-6 py-4">
-                      <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-tighter">{s.student.status}</Badge>
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-tighter">{getStudentStatusLabel(s.student.status)}</Badge>
                     </td>
                     <td className="px-6 py-4 text-xs text-slate-500">{new Date(s.joinedAt).toLocaleDateString('vi-VN')}</td>
                     <td className="px-6 py-4 text-right">
@@ -440,28 +440,28 @@ export default function ClassDetailClient({ id }: { id: string }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <form onSubmit={handleUpdateClass} className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <h2 className="text-lg font-bold text-slate-900">Chinh sua thong tin lop</h2>
+              <h2 className="text-lg font-bold text-slate-900">Chỉnh sửa thông tin lớp</h2>
               <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X size={20} />
               </button>
             </div>
             <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-              <ClassEditField label="Ten lop" value={editForm.name} onChange={(value) => setEditForm((form) => ({ ...form, name: value }))} required />
-              <ClassEditField label="Ma lop" value={editForm.code} onChange={(value) => setEditForm((form) => ({ ...form, code: value }))} required />
-              <ClassEditField label="Si so toi da" type="number" value={editForm.capacity} onChange={(value) => setEditForm((form) => ({ ...form, capacity: value }))} required />
+              <ClassEditField label="Tên lớp" value={editForm.name} onChange={(value) => setEditForm((form) => ({ ...form, name: value }))} required />
+              <ClassEditField label="Mã lớp" value={editForm.code} onChange={(value) => setEditForm((form) => ({ ...form, code: value }))} required />
+              <ClassEditField label="Sĩ số tối đa" type="number" value={editForm.capacity} onChange={(value) => setEditForm((form) => ({ ...form, capacity: value }))} required />
               <label className="text-sm text-slate-600">
-                Trang thai
+                Trạng thái
                 <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20" value={editForm.status} onChange={(event) => setEditForm((form) => ({ ...form, status: event.target.value }))}>
-                  <option value="PLANNING">PLANNING</option>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="FINISHED">FINISHED</option>
-                  <option value="CANCELLED">CANCELLED</option>
+                  <option value="PLANNING">Đang lên kế hoạch</option>
+                  <option value="ACTIVE">Đang học</option>
+                  <option value="FINISHED">Đã kết thúc</option>
+                  <option value="CANCELLED">Đã hủy</option>
                 </select>
               </label>
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Huy</Button>
-              <Button type="submit" disabled={isSaving}>{isSaving ? 'Dang luu...' : 'Luu thong tin'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Hủy</Button>
+              <Button type="submit" disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu thông tin'}</Button>
             </div>
           </form>
         </div>
@@ -470,21 +470,21 @@ export default function ClassDetailClient({ id }: { id: string }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <form onSubmit={handleEnrollStudent} className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <h2 className="text-lg font-bold text-slate-900">Them hoc sinh vao lop</h2>
+              <h2 className="text-lg font-bold text-slate-900">Thêm học sinh vào lớp</h2>
               <button type="button" onClick={() => setShowEnrollModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X size={20} />
               </button>
             </div>
             <div className="p-6">
               <label className="text-sm text-slate-600">
-                Hoc sinh
+                Học sinh
                 <select
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20"
                   value={selectedStudentId}
                   onChange={(event) => setSelectedStudentId(event.target.value)}
                   required
                 >
-                  <option value="">Chon hoc sinh</option>
+                  <option value="">Chọn học sinh</option>
                   {availableStudents.map((student: any) => (
                     <option key={student.id} value={student.id}>
                       {student.code} - {student.fullName}
@@ -493,13 +493,13 @@ export default function ClassDetailClient({ id }: { id: string }) {
                 </select>
               </label>
               {!availableStudents.length && (
-                <p className="mt-3 text-sm text-slate-400">Khong con hoc sinh phu hop de them vao lop nay.</p>
+                <p className="mt-3 text-sm text-slate-400">Không còn học sinh phù hợp để thêm vào lớp này.</p>
               )}
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-              <Button type="button" variant="outline" onClick={() => setShowEnrollModal(false)}>Huy</Button>
+              <Button type="button" variant="outline" onClick={() => setShowEnrollModal(false)}>Hủy</Button>
               <Button type="submit" disabled={isSaving || !selectedStudentId}>
-                {isSaving ? 'Dang luu...' : 'Them hoc sinh'}
+                {isSaving ? 'Đang lưu...' : 'Thêm học sinh'}
               </Button>
             </div>
           </form>
@@ -534,4 +534,27 @@ function ClassEditField({
       />
     </label>
   );
+}
+
+function getClassStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    PLANNING: 'Đang lên kế hoạch',
+    ACTIVE: 'Đang học',
+    FINISHED: 'Đã kết thúc',
+    CANCELLED: 'Đã hủy',
+  };
+  return labels[status] || status;
+}
+
+function getStudentStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    PENDING: 'Chờ xử lý',
+    TRIAL: 'Học thử',
+    ACTIVE: 'Đang học',
+    HOLD: 'Tạm dừng',
+    COMPLETED: 'Hoàn thành',
+    DROPPED: 'Đã nghỉ',
+    RENEWAL_CANDIDATE: 'Cần tái phí',
+  };
+  return labels[status] || status;
 }

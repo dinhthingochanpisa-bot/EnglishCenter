@@ -7,8 +7,8 @@ export class ReportingService {
   constructor(private prisma: PrismaService) {}
 
   async getExecutiveDashboard(user: any) {
-    const where = CenterScope.filter(user);
-    const centerWhere = CenterScope.filter(user, 'id');
+    const where = this.getExecutiveScope(user);
+    const centerWhere = this.getExecutiveScope(user, 'id');
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -216,6 +216,17 @@ export class ReportingService {
       ),
       receivablesByStatus: this.buildReceivableStatus(receivablesByStatusRaw),
     };
+  }
+
+  private getExecutiveScope(user: any, centerIdField: string = 'centerId') {
+    const permissions = user.permissions || [];
+    const canViewSystemReport =
+      user.role === 'SUPER_ADMIN' ||
+      permissions.includes('*') ||
+      permissions.includes('REPORTING.VIEW');
+
+    if (canViewSystemReport) return {};
+    return CenterScope.filter(user, centerIdField);
   }
 
   private calculateCapacityStats(

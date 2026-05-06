@@ -150,15 +150,15 @@ export default function FamilyDetailClient({ id }: { id: string }) {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {rel.isPrimaryPayer && <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 text-[10px]">Payer</Badge>}
-                    {rel.isPrimaryContact && <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 text-[10px]">Contact</Badge>}
+                    {rel.isPrimaryPayer && <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 text-[10px]">Người thanh toán</Badge>}
+                    {rel.isPrimaryContact && <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 text-[10px]">Liên hệ chính</Badge>}
                   </div>
                 </Card>
               ))}
             </div>
 
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mt-8">
-              <Users size={20} /> Legal Guardians
+              <Users size={20} /> Phụ huynh / Người giám hộ
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {family.relations.map((rel: any) => rel.parentId).filter((v: any, i: any, a: any) => a.indexOf(v) === i).map((parentId: string) => {

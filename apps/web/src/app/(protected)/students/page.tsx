@@ -112,6 +112,19 @@ export default function StudentsPage() {
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      PENDING: 'Chờ xử lý',
+      TRIAL: 'Học thử',
+      ACTIVE: 'Đang học',
+      HOLD: 'Tạm dừng',
+      COMPLETED: 'Hoàn thành',
+      DROPPED: 'Đã nghỉ',
+      RENEWAL_CANDIDATE: 'Cần tái phí',
+    };
+    return labels[status] || status;
+  };
+
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredStudents = normalizedSearch
     ? students.filter((student) => {
@@ -261,7 +274,7 @@ export default function StudentsPage() {
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="font-bold text-slate-900 group-hover:text-primary transition-colors">{student.fullName}</h3>
                     <Badge variant={getStatusVariant(student.status)} className="capitalize">
-                      {student.status.toLowerCase()}
+                      {getStatusLabel(student.status)}
                     </Badge>
                   </div>
                   <p className="text-xs text-slate-500 font-medium mb-3 flex items-center gap-1">

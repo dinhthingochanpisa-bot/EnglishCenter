@@ -220,7 +220,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
       setShowEditModal(false);
       await fetchData();
     } catch (err: any) {
-      setError(err.message || 'Khong the cap nhat thong tin hoc sinh');
+      setError(err.message || 'Không thể cập nhật thông tin học sinh');
     } finally {
       setIsSaving(false);
     }
@@ -245,7 +245,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
       setShowResultModal(false);
       await fetchData();
     } catch (err: any) {
-      setError(err.message || 'Khong the luu ket qua hoc tap');
+      setError(err.message || 'Không thể lưu kết quả học tập');
     } finally {
       setIsSaving(false);
     }
@@ -506,12 +506,12 @@ export default function StudentDetailClient({ id }: { id: string }) {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900">{student.fullName}</h1>
-            <Badge variant="outline" className="font-bold uppercase tracking-widest">{student.status}</Badge>
+            <Badge variant="outline" className="font-bold uppercase tracking-widest">{getStudentStatusLabel(student.status)}</Badge>
           </div>
           <p className="text-sm text-slate-500 font-medium">Mã học sinh: {student.code} • {student.center?.name}</p>
         </div>
         <Button variant="outline" className="gap-2" onClick={openEditModal}>
-          <Pencil size={16} /> Chinh sua
+          <Pencil size={16} /> Chỉnh sửa
         </Button>
       </div>
 
@@ -1088,8 +1088,8 @@ export default function StudentDetailClient({ id }: { id: string }) {
               </label>
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-              <Button type="button" variant="outline" onClick={() => setShowResultModal(false)}>Huy</Button>
-              <Button type="submit" disabled={isSaving || !resultForm.score}>{isSaving ? 'Dang luu...' : 'Luu ket qua'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowResultModal(false)}>Hủy</Button>
+              <Button type="submit" disabled={isSaving || !resultForm.score}>{isSaving ? 'Đang lưu...' : 'Lưu kết quả'}</Button>
             </div>
           </form>
         </div>
@@ -1099,60 +1099,61 @@ export default function StudentDetailClient({ id }: { id: string }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <form onSubmit={handleUpdateStudent} className="w-full max-w-3xl rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <h3 className="font-semibold text-slate-900">Chinh sua thong tin hoc sinh</h3>
+              <h3 className="font-semibold text-slate-900">Chỉnh sửa thông tin học sinh</h3>
               <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X size={20} />
               </button>
             </div>
             <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-              <StudentEditField label="Ho ten" value={editForm.fullName} onChange={(value) => setEditForm((form) => ({ ...form, fullName: value }))} required />
-              <StudentEditField label="Ngay sinh" type="date" value={editForm.birthday} onChange={(value) => setEditForm((form) => ({ ...form, birthday: value }))} />
+              <StudentEditField label="Họ tên" value={editForm.fullName} onChange={(value) => setEditForm((form) => ({ ...form, fullName: value }))} required />
+              <StudentEditField label="Ngày sinh" type="date" value={editForm.birthday} onChange={(value) => setEditForm((form) => ({ ...form, birthday: value }))} />
               <label className="text-sm text-slate-500">
-                Gioi tinh
+                Giới tính
                 <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.gender} onChange={(event) => setEditForm((form) => ({ ...form, gender: event.target.value }))}>
-                  <option value="MALE">MALE</option>
-                  <option value="FEMALE">FEMALE</option>
-                  <option value="OTHER">OTHER</option>
+                  <option value="MALE">Nam</option>
+                  <option value="FEMALE">Nữ</option>
+                  <option value="OTHER">Khác</option>
                 </select>
               </label>
               <label className="text-sm text-slate-500">
-                Trang thai
+                Trạng thái
                 <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.status} onChange={(event) => setEditForm((form) => ({ ...form, status: event.target.value }))}>
-                  <option value="PENDING">PENDING</option>
-                  <option value="TRIAL">TRIAL</option>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="HOLD">HOLD</option>
-                  <option value="ALUMNI">ALUMNI</option>
-                  <option value="DROPPED">DROPPED</option>
+                  <option value="PENDING">Chờ xử lý</option>
+                  <option value="TRIAL">Học thử</option>
+                  <option value="ACTIVE">Đang học</option>
+                  <option value="HOLD">Tạm dừng</option>
+                  <option value="COMPLETED">Hoàn thành</option>
+                  <option value="DROPPED">Đã nghỉ</option>
+                  <option value="RENEWAL_CANDIDATE">Cần tái phí</option>
                 </select>
               </label>
-              <StudentEditField label="Lop/Khoi" value={editForm.currentGrade} onChange={(value) => setEditForm((form) => ({ ...form, currentGrade: value }))} />
-              <StudentEditField label="Truong" value={editForm.school} onChange={(value) => setEditForm((form) => ({ ...form, school: value }))} />
-              <StudentEditField label="Muc tieu" value={editForm.aim} onChange={(value) => setEditForm((form) => ({ ...form, aim: value, target: value }))} />
-              <StudentEditField label="SDT hoc sinh" value={editForm.studentPhone} onChange={(value) => setEditForm((form) => ({ ...form, studentPhone: value }))} />
+              <StudentEditField label="Lớp/Khối" value={editForm.currentGrade} onChange={(value) => setEditForm((form) => ({ ...form, currentGrade: value }))} />
+              <StudentEditField label="Trường" value={editForm.school} onChange={(value) => setEditForm((form) => ({ ...form, school: value }))} />
+              <StudentEditField label="Mục tiêu" value={editForm.aim} onChange={(value) => setEditForm((form) => ({ ...form, aim: value, target: value }))} />
+              <StudentEditField label="SĐT học sinh" value={editForm.studentPhone} onChange={(value) => setEditForm((form) => ({ ...form, studentPhone: value }))} />
               <label className="text-sm text-slate-500 md:col-span-2">
-                Dia chi
+                Địa chỉ
                 <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.address} onChange={(event) => setEditForm((form) => ({ ...form, address: event.target.value }))} />
               </label>
               <div className="border-t border-slate-100 pt-4 md:col-span-2">
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Thong tin phu huynh chinh</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Thông tin phụ huynh chính</p>
               </div>
-              <StudentEditField label="Ho ten phu huynh" value={editForm.parentFullName} onChange={(value) => setEditForm((form) => ({ ...form, parentFullName: value }))} />
-              <StudentEditField label="SDT phu huynh" value={editForm.parentPhone} onChange={(value) => setEditForm((form) => ({ ...form, parentPhone: value }))} />
+              <StudentEditField label="Họ tên phụ huynh" value={editForm.parentFullName} onChange={(value) => setEditForm((form) => ({ ...form, parentFullName: value }))} />
+              <StudentEditField label="SĐT phụ huynh" value={editForm.parentPhone} onChange={(value) => setEditForm((form) => ({ ...form, parentPhone: value }))} />
               <StudentEditField label="Email phu huynh" value={editForm.parentEmail} onChange={(value) => setEditForm((form) => ({ ...form, parentEmail: value }))} />
               <StudentEditField label="Quan he" value={editForm.parentRelationship} onChange={(value) => setEditForm((form) => ({ ...form, parentRelationship: value }))} />
               <label className="text-sm text-slate-500 md:col-span-2">
-                Dia chi phu huynh
+                Địa chỉ phụ huynh
                 <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.parentAddress} onChange={(event) => setEditForm((form) => ({ ...form, parentAddress: event.target.value }))} />
               </label>
               <label className="text-sm text-slate-500 md:col-span-2">
-                Ghi chu
+                Ghi chú
                 <textarea className="mt-1 min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={editForm.notes} onChange={(event) => setEditForm((form) => ({ ...form, notes: event.target.value }))} />
               </label>
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Huy</Button>
-              <Button type="submit" disabled={isSaving || !editForm.fullName}>{isSaving ? 'Dang luu...' : 'Luu thay doi'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Hủy</Button>
+              <Button type="submit" disabled={isSaving || !editForm.fullName}>{isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}</Button>
             </div>
           </form>
         </div>
@@ -1675,6 +1676,19 @@ function getContractStatusLabel(status: string) {
     EXPIRED: 'Hết hạn',
     TERMINATED: 'Đã chấm dứt',
     CANCELLED: 'Đã hủy',
+  };
+  return labels[status] || status;
+}
+
+function getStudentStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    PENDING: 'Chờ xử lý',
+    TRIAL: 'Học thử',
+    ACTIVE: 'Đang học',
+    HOLD: 'Tạm dừng',
+    COMPLETED: 'Hoàn thành',
+    DROPPED: 'Đã nghỉ',
+    RENEWAL_CANDIDATE: 'Cần tái phí',
   };
   return labels[status] || status;
 }

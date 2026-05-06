@@ -34,10 +34,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async (silent = false) => {
     if (silent) setIsRefreshing(true);
     try {
+      setError(null);
       const [dashResult, notifResult] = await Promise.all([
         reportingApi.getExecutive(),
         reportingApi.getNotifications(),
@@ -47,6 +49,7 @@ export default function DashboardPage() {
       setLastUpdated(new Date());
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
+      setError(error instanceof Error ? error.message : 'Không thể tải dữ liệu dashboard');
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -129,7 +132,7 @@ export default function DashboardPage() {
       value: formatNumber(summary?.refireStudents || 0),
       icon: TrendingUp,
       variant: 'warning',
-      description: 'Học sinh trạng thái RENEWAL_CANDIDATE',
+      description: 'Học sinh cần chăm sóc tái phí',
     },
     {
       title: 'Đến hạn tái phí',
@@ -190,6 +193,11 @@ export default function DashboardPage() {
             Dữ liệu tự đồng bộ mỗi {formatRefreshInterval(DASHBOARD_REFRESH_INTERVAL_MS)}
             {lastUpdated ? `, lần gần nhất ${lastUpdated.toLocaleTimeString('vi-VN')}` : ''}.
           </p>
+          {error ? (
+            <p className="mt-2 text-sm font-semibold text-rose-600">
+              Lỗi tải dữ liệu dashboard: {error}
+            </p>
+          ) : null}
         </div>
         <Button variant="outline" className="md:self-end" onClick={handleExportReport} disabled={!data}>
           Xuất báo cáo
@@ -217,7 +225,7 @@ export default function DashboardPage() {
           <ExamMonthlyChart data={data?.examMonthlyTrend || []} />
         </Card>
 
-        <Card className="xl:col-span-5" title="Công suất vận hành" subtitle="Sĩ số lớp ACTIVE so với capacity đã cấu hình">
+        <Card className="xl:col-span-5" title="Công suất vận hành" subtitle="Sĩ số lớp đang học so với sức chứa đã cấu hình">
           <div className="space-y-5">
             <CapacityGauge
               label="Công suất trung tâm"
@@ -227,7 +235,7 @@ export default function DashboardPage() {
             <CapacityGauge
               label="Tỷ lệ lấp đầy ca học"
               value={summary?.scheduleFillRate || 0}
-              detail="Tính theo capacity của các ca thuộc lớp ACTIVE"
+              detail="Tính theo sức chứa của các ca thuộc lớp đang học"
             />
           </div>
         </Card>
@@ -244,7 +252,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <Card className="lg:col-span-2" title="Gia hạn & Tái tục sắp tới" subtitle="Hợp đồng ACTIVE sắp hết hạn trong 30 ngày">
+        <Card className="lg:col-span-2" title="Gia hạn & Tái tục sắp tới" subtitle="Hợp đồng đang hiệu lực sắp hết hạn trong 30 ngày">
           <div className="grid gap-4 md:grid-cols-[240px_1fr]">
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/70 py-8">
               <TrendingUp size={42} className="text-slate-300 mb-3" />
@@ -500,8 +508,8 @@ function CenterPerformanceChart({ data }: { data: ExecutiveDashboardData['center
             </div>
             <Badge variant="success">Đang hoạt động</Badge>
           </div>
-          <MetricBar label="Học sinh" value={center.activeStudents} max={maxValue} color="bg-primary" detail={`${center.activeStudents} học sinh ACTIVE tại ${center.code}`} />
-          <MetricBar label="Hợp đồng" value={center.activeContracts} max={maxValue} color="bg-emerald-500" detail={`${center.activeContracts} hợp đồng ACTIVE tại ${center.code}`} />
+          <MetricBar label="Học sinh" value={center.activeStudents} max={maxValue} color="bg-primary" detail={`${center.activeStudents} học sinh đang học tại ${center.code}`} />
+          <MetricBar label="Hợp đồng" value={center.activeContracts} max={maxValue} color="bg-emerald-500" detail={`${center.activeContracts} hợp đồng đang hiệu lực tại ${center.code}`} />
         </div>
       ))}
     </div>
