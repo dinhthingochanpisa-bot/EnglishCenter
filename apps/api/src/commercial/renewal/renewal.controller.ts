@@ -25,17 +25,33 @@ export class RenewalController {
   @Permissions('RENEWAL_RETENTION.VIEW')
   async findCandidates(
     @Request() req: any,
-    @Query('days') days?: string,
+    @Query('threshold') threshold?: string,
+    @Query('keyword') keyword?: string,
     @Query('centerId') centerId?: string,
   ) {
     const where = CenterScope.filter(req.user, 'centerId', centerId);
-    return this.renewalService.findRenewalCandidates(where, days ? parseInt(days) : 30);
+    const sessionThreshold = Number(threshold || 20);
+
+    return this.renewalService.findRenewalCandidates(
+      where,
+      Number.isFinite(sessionThreshold) && sessionThreshold > 0
+        ? sessionThreshold
+        : 20,
+      keyword,
+    );
   }
 
   @Post(':contractId')
   @Permissions('RENEWAL_RETENTION.CREATE')
-  async createRenewal(@Param('contractId') contractId: string, @Request() req: any) {
+  async createRenewal(
+    @Param('contractId') contractId: string,
+    @Request() req: any,
+  ) {
     // Pass user object for scope validation in service
-    return this.renewalService.createRenewal(contractId, req.user.userId, req.user);
+    return this.renewalService.createRenewal(
+      contractId,
+      req.user.userId,
+      req.user,
+    );
   }
 }
