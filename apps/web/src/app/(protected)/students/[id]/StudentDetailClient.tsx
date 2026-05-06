@@ -1104,14 +1104,14 @@ export default function StudentDetailClient({ id }: { id: string }) {
 
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <form onSubmit={handleUpdateStudent} className="w-full max-w-3xl rounded-xl bg-white shadow-xl">
+          <form onSubmit={handleUpdateStudent} className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <h3 className="font-semibold text-slate-900">Chỉnh sửa thông tin học sinh</h3>
               <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X size={20} />
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-6 md:grid-cols-2">
               <StudentEditField label="Họ tên" value={editForm.fullName} onChange={(value) => setEditForm((form) => ({ ...form, fullName: value }))} required />
               <StudentEditField label="Ngày sinh" type="date" value={editForm.birthday} onChange={(value) => setEditForm((form) => ({ ...form, birthday: value }))} />
               <label className="text-sm text-slate-500">
