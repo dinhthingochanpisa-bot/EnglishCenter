@@ -29,6 +29,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AuditTrail } from '@/components/common/AuditTrail';
+import { InternalThread } from '@/components/collaboration/InternalThread';
 
 type Tab = 'info' | 'contracts' | 'academic' | 'care' | 'exam' | 'issues' | 'notes';
 
@@ -1158,6 +1159,8 @@ export default function StudentDetailClient({ id }: { id: string }) {
         )}
 
         {activeTab === 'notes' && (
+          <div className="space-y-6">
+          <InternalThread entityType="STUDENT" entityId={id} />
           <Card className="p-6">
              <div className="flex justify-between items-center mb-8">
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Nhật ký học tập & Feedback</h3>
@@ -1185,6 +1188,7 @@ export default function StudentDetailClient({ id }: { id: string }) {
                 )}
              </div>
           </Card>
+          </div>
         )}
       </div>
 

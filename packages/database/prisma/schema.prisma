@@ -108,6 +108,7 @@ model Center {
   trialEvents    TrialEvent[]
   auditLogs      AuditLog[]
   payments       Payment[]
+  conversations  Conversation[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -131,6 +132,7 @@ model User {
   createdCustomerIssues CustomerIssue[] @relation("CustomerIssueCreator")
   taughtClasses   Class[]          @relation("ClassTeacher")
   progressNotes   ProgressNote[]
+  messages        Message[]
   createdCareEvents StudentCareEvent[] @relation("StudentCareEventCreator")
   createdExamEvents StudentExamEvent[] @relation("StudentExamEventCreator")
   createdWarrantyCases WarrantyCase[] @relation("WarrantyCaseCreator")
@@ -195,6 +197,7 @@ model Parent {
   careNotes String?
   relations ParentStudentRelation[]
   leads     Lead[]
+  conversations Conversation[]
   customerIssues CustomerIssue[]
   createdAt DateTime                @default(now())
   updatedAt DateTime                @updatedAt
@@ -221,6 +224,7 @@ model Student {
   examEvents   StudentExamEvent[]
   warrantyCases WarrantyCase[]
   customerIssues CustomerIssue[]
+  conversations Conversation[]
   target       String?
   outcome      String?
   warningFlags String?
@@ -323,6 +327,7 @@ model Lead {
   testEvents   TestEvent[]
   trialEvents  TrialEvent[]
   customerIssues CustomerIssue[]
+  conversations Conversation[]
   target       String?
   campaign     String?
   prospectiveStudentName String?
@@ -550,12 +555,62 @@ model Task {
   class       Class?     @relation(fields: [classId], references: [id])
   assigneeId  String
   assignee    User       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  conversations Conversation[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   @@index([studentId])
   @@index([contractId])
   @@index([classId])
+}
+
+model Conversation {
+  id         String    @id @default(uuid())
+  entityType String
+  entityId   String
+  title      String?
+  centerId   String
+  center     Center    @relation(fields: [centerId], references: [id])
+  leadId     String?
+  lead       Lead?     @relation(fields: [leadId], references: [id])
+  studentId  String?
+  student    Student?  @relation(fields: [studentId], references: [id])
+  parentId   String?
+  parent     Parent?   @relation(fields: [parentId], references: [id])
+  taskId     String?
+  task       Task?     @relation(fields: [taskId], references: [id])
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id])
+  classId    String?
+  class      Class?    @relation(fields: [classId], references: [id])
+  messages   Message[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([entityType, entityId])
+  @@index([centerId])
+  @@index([leadId])
+  @@index([studentId])
+  @@index([parentId])
+  @@index([taskId])
+  @@index([contractId])
+  @@index([classId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         User         @relation(fields: [authorId], references: [id])
+  content        String
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([conversationId, createdAt])
+  @@index([authorId])
 }
 
 enum TaskStatus {
@@ -685,6 +740,7 @@ model Class {
   progressNotes   ProgressNote[]
   careEvents   StudentCareEvent[]
   examEvents   StudentExamEvent[]
+  conversations Conversation[]
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
@@ -1003,6 +1059,7 @@ model Contract {
   examEvents     StudentExamEvent[]
   warrantyCases  WarrantyCase[]
   tasks          Task[]
+  conversations  Conversation[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }

@@ -22,6 +22,7 @@ import { ParentModule } from './parent/parent.module';
 import { AcademicModule } from './academic/academic.module';
 import { CommercialModule } from './commercial/commercial.module';
 import { ReportingModule } from './reporting/reporting.module';
+import { CollaborationModule } from './collaboration/collaboration.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import {
   getLogoUploadDir,
@@ -69,6 +70,7 @@ import {
     AcademicModule,
     CommercialModule,
     ReportingModule,
+    CollaborationModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

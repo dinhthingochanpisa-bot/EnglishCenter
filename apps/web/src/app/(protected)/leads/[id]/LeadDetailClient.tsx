@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ModuleBoundary } from '@/components/common/ModuleBoundary';
 import { AuditTrail } from '@/components/common/AuditTrail';
+import { InternalThread } from '@/components/collaboration/InternalThread';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -1817,6 +1818,8 @@ export default function LeadDetailClient({ id }: { id: string }) {
                 )}
               </div>
             </Card>
+
+            <InternalThread entityType="LEAD" entityId={id} />
 
             <Card className="p-6">
               <div className="mb-5 flex items-center justify-between gap-3">

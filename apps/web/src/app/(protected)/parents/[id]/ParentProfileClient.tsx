@@ -24,6 +24,7 @@ import {
 import Link from "next/link";
 import { ModuleBoundary } from "@/components/common/ModuleBoundary";
 import { AuditTrail } from "@/components/common/AuditTrail";
+import { InternalThread } from "@/components/collaboration/InternalThread";
 import { useAppDialog } from "@/providers/AppDialogProvider";
 
 export default function ParentProfileClient({ id }: { id: string }) {
@@ -312,6 +313,8 @@ export default function ParentProfileClient({ id }: { id: string }) {
                 </div>
               )}
             </Card>
+
+            <InternalThread entityType="PARENT" entityId={id} />
 
             <Card className="p-6">
               <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
