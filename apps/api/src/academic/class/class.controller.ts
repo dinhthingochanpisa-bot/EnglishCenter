@@ -363,4 +363,200 @@ export class ClassController {
       return { success: true };
     });
   }
+
+  @Get(':id/periodic-comments')
+  @Permissions('CLASS_ACADEMIC.VIEW')
+  async getPeriodicComments(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Query('periodType') periodType: string,
+    @Query('periodKey') periodKey: string,
+    @Query('teacherId') teacherId?: string,
+    @Query('search') search?: string,
+  ) {
+    const cls = await this.prisma.class.findUnique({
+      where: { id },
+      select: { centerId: true },
+    });
+    if (!cls) throw new NotFoundException('Class not found');
+    CenterScope.validate(req.user, cls.centerId);
+    if (!['WEEKLY', 'MONTHLY'].includes(periodType)) {
+      throw new BadRequestException('Invalid period type');
+    }
+    if (!periodKey?.trim()) {
+      throw new BadRequestException('Missing period key');
+    }
+
+    const students = await this.prisma.classStudent.findMany({
+      where: {
+        classId: id,
+        status: 'ACTIVE',
+        student: search
+          ? {
+              OR: [
+                { fullName: { contains: search, mode: 'insensitive' } },
+                { code: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : undefined,
+      },
+      include: {
+        student: {
+          include: {
+            contracts: {
+              where: { status: 'ACTIVE' },
+              select: { productName: true, productRank: true, feePackage: true },
+            },
+            progressNotes: {
+              where: {
+                classId: id,
+                periodType,
+                periodKey: periodKey.trim(),
+                teacherId: teacherId || undefined,
+              },
+              include: { teacher: { select: { id: true, fullName: true } } },
+              orderBy: { updatedAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    return students.map((cs) => ({
+      studentId: cs.student.id,
+      fullName: cs.student.fullName,
+      code: cs.student.code,
+      status: cs.student.status,
+      contracts: cs.student.contracts,
+      comment: cs.student.progressNotes[0] || null,
+    }));
+  }
+
+  @Post(':id/periodic-comments')
+  @Permissions('CLASS_ACADEMIC.UPDATE')
+  async upsertPeriodicComment(
+    @Param('id') id: string,
+    @Body() data: any,
+    @Request() req: any,
+  ) {
+    const cls = await this.prisma.class.findUnique({
+      where: { id },
+      select: { centerId: true },
+    });
+    if (!cls) throw new NotFoundException('Class not found');
+    CenterScope.validate(req.user, cls.centerId);
+
+    const {
+      studentId,
+      teacherId,
+      periodType,
+      periodKey,
+      content,
+      strengths,
+      improvements,
+      nextSteps,
+    } = data;
+
+    if (!studentId || !teacherId || !periodType || !periodKey || !content) {
+      throw new BadRequestException('Missing required fields');
+    }
+    if (!['WEEKLY', 'MONTHLY'].includes(periodType)) {
+      throw new BadRequestException('Invalid period type');
+    }
+
+    const isMember = await this.prisma.classStudent.findUnique({
+      where: { classId_studentId: { classId: id, studentId } },
+    });
+    if (!isMember) throw new BadRequestException('Student not in this class');
+
+    const teacher = await this.prisma.user.findFirst({
+      where: {
+        id: teacherId,
+        isActive: true,
+        centers: { some: { centerId: cls.centerId } },
+      },
+      select: { id: true },
+    });
+    if (!teacher) throw new BadRequestException('Invalid teacher');
+
+    const existing = await this.prisma.progressNote.findFirst({
+      where: {
+        classId: id,
+        studentId,
+        periodType,
+        periodKey: String(periodKey).trim(),
+        teacherId,
+      },
+    });
+
+    let savedNote;
+    if (existing) {
+      savedNote = await this.prisma.progressNote.update({
+        where: { id: existing.id },
+        data: {
+          teacherId,
+          strengths,
+          improvements,
+          nextSteps,
+          content: String(content).trim(),
+          date: new Date(),
+        },
+      });
+    } else {
+      savedNote = await this.prisma.progressNote.create({
+        data: {
+          studentId,
+          classId: id,
+          teacherId,
+          periodType,
+          periodKey: String(periodKey).trim(),
+          content: String(content).trim(),
+          strengths,
+          improvements,
+          nextSteps,
+          date: new Date(),
+        },
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: req.user.id || req.user.userId,
+        entityType: 'PROGRESS_NOTE',
+        entityId: savedNote.id,
+        action: existing ? 'UPDATE_PERIODIC_COMMENT' : 'CREATE_PERIODIC_COMMENT',
+        beforeData: existing as any,
+        afterData: savedNote as any,
+        centerId: cls.centerId,
+      },
+    });
+
+    return savedNote;
+  }
+
+  @Get(':id/teachers')
+  @Permissions('CLASS_ACADEMIC.VIEW')
+  async getTeachers(@Param('id') id: string, @Request() req: any) {
+    const cls = await this.prisma.class.findUnique({
+      where: { id },
+      select: { centerId: true },
+    });
+    if (!cls) throw new NotFoundException('Class not found');
+    CenterScope.validate(req.user, cls.centerId);
+
+    // Fetch users who are teachers in this center
+    return this.prisma.user.findMany({
+      where: {
+        centers: { some: { centerId: cls.centerId } },
+        isActive: true,
+        OR: [
+          { role: { code: { in: ['ACADEMIC', 'ADMIN', 'SUPER_ADMIN', 'MANAGER'] } } },
+          { taughtClasses: { some: { centerId: cls.centerId } } },
+        ],
+      },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
 }

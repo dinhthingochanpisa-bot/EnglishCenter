@@ -28,6 +28,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppDialog } from "@/providers/AppDialogProvider";
 import { AuditTrail } from "@/components/common/AuditTrail";
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachWeekOfInterval, subWeeks, addWeeks, subMonths, addMonths } from "date-fns";
+import { vi } from "date-fns/locale";
 
 type Tab = "overview" | "roster" | "attendance" | "results";
 
@@ -55,6 +57,25 @@ export default function ClassDetailClient({ id }: { id: string }) {
     status: "PLANNING",
     capacity: "20",
   });
+
+  // Periodic Comments State
+  const [periodicComments, setPeriodicComments] = useState<any[]>([]);
+  const [periodType, setPeriodType] = useState<"WEEKLY" | "MONTHLY">("WEEKLY");
+  const [periodKey, setPeriodKey] = useState("");
+  const [selectedTeacherId, setSelectedTeacherId] = useState("");
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+  const [commentSearch, setCommentSearch] = useState("");
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [activeCommentStudent, setActiveCommentStudent] = useState<any>(null);
+  const [commentForm, setCommentForm] = useState({
+    content: "",
+    strengths: "",
+    improvements: "",
+    nextSteps: "",
+    teacherId: "",
+  });
+
   const router = useRouter();
 
   const fetchData = async () => {
@@ -83,6 +104,60 @@ export default function ClassDetailClient({ id }: { id: string }) {
   useEffect(() => {
     fetchData();
   }, [id]);
+
+  // Set initial period key
+  useEffect(() => {
+    if (!periodKey) {
+      const now = new Date();
+      if (periodType === "WEEKLY") {
+        const sw = startOfWeek(now, { weekStartsOn: 1 });
+        setPeriodKey(format(sw, "yyyy-'W'ww"));
+      } else {
+        setPeriodKey(format(now, "yyyy-MM"));
+      }
+    }
+  }, [periodType]);
+
+  const fetchPeriodicComments = async () => {
+    if (activeTab !== "results" || !periodKey) return;
+    setIsCommentsLoading(true);
+    try {
+      const query = new URLSearchParams({
+        periodType,
+        periodKey,
+        teacherId: selectedTeacherId,
+        search: commentSearch,
+      });
+      const resp = await apiFetch(
+        `/academic/classes/${id}/periodic-comments?${query}`,
+      );
+      setPeriodicComments(resp as any[]);
+    } catch (err: any) {
+      notify({
+        type: "error",
+        title: "Lỗi tải nhận xét",
+        message: err.message,
+      });
+    } finally {
+      setIsCommentsLoading(false);
+    }
+  };
+
+  const fetchTeachers = async () => {
+    try {
+      const resp = await apiFetch(`/academic/classes/${id}/teachers`);
+      setTeachers(resp as any[]);
+    } catch (err) {
+      console.error("Failed to fetch teachers", err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "results") {
+      fetchPeriodicComments();
+      if (teachers.length === 0) fetchTeachers();
+    }
+  }, [activeTab, periodType, periodKey, selectedTeacherId, commentSearch]);
 
   const openEnrollModal = () => {
     setShowEnrollModal(true);
@@ -254,6 +329,83 @@ export default function ClassDetailClient({ id }: { id: string }) {
     }
   };
 
+  const handleOpenCommentModal = (student: any) => {
+    setActiveCommentStudent(student);
+    const existing = student.comment;
+    setCommentForm({
+      content: existing?.content || "",
+      strengths: existing?.strengths || "",
+      improvements: existing?.improvements || "",
+      nextSteps: existing?.nextSteps || "",
+      teacherId: existing?.teacherId || selectedTeacherId || data.teacher?.id || "",
+    });
+    setShowCommentModal(true);
+  };
+
+  const handleSaveComment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!activeCommentStudent) return;
+    setIsSaving(true);
+    try {
+      await apiFetch(`/academic/classes/${id}/periodic-comments`, {
+        method: "POST",
+        body: JSON.stringify({
+          studentId: activeCommentStudent.studentId,
+          teacherId: commentForm.teacherId,
+          periodType,
+          periodKey,
+          content: commentForm.content.trim(),
+          strengths: commentForm.strengths.trim(),
+          improvements: commentForm.improvements.trim(),
+          nextSteps: commentForm.nextSteps.trim(),
+        }),
+      });
+      setShowCommentModal(false);
+      await fetchPeriodicComments();
+      notify({ type: "success", title: "Đã lưu nhận xét định kỳ" });
+    } catch (err: any) {
+      notify({
+        type: "error",
+        title: "Lỗi lưu nhận xét",
+        message: err.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const isPremiumPlan = (contracts: any[]) => {
+    return (contracts || []).some((c) =>
+      /Diamond|VIP|Premium|Intensive|1-1/i.test(
+        c.productName || c.productRank || c.feePackage || "",
+      ),
+    );
+  };
+
+  const getPeriodOptions = () => {
+    const now = new Date();
+    if (periodType === "WEEKLY") {
+      const start = subWeeks(now, 8);
+      const end = addWeeks(now, 2);
+      return eachWeekOfInterval({ start, end }, { weekStartsOn: 1 }).map((w) => {
+        const sw = startOfWeek(w, { weekStartsOn: 1 });
+        const ew = endOfWeek(w, { weekStartsOn: 1 });
+        const key = format(sw, "yyyy-'W'ww");
+        const label = `Tuần ${format(sw, "ww")} (${format(sw, "dd/MM")} - ${format(ew, "dd/MM")})`;
+        return { key, label };
+      });
+    } else {
+      const options = [];
+      for (let i = -6; i <= 2; i++) {
+        const d = addMonths(now, i);
+        const key = format(d, "yyyy-MM");
+        const label = `Tháng ${format(d, "MM/yyyy")}`;
+        options.push({ key, label });
+      }
+      return options;
+    }
+  };
+
   if (isLoading)
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400 gap-3">
@@ -309,7 +461,7 @@ export default function ClassDetailClient({ id }: { id: string }) {
           { id: "overview", label: "Tổng quan", icon: Calendar },
           { id: "roster", label: "Danh sách lớp", icon: Users },
           { id: "attendance", label: "Điểm danh", icon: CheckCircle2 },
-          { id: "results", label: "Kết quả học tập", icon: GraduationCap },
+          { id: "results", label: "Nhận xét định kỳ", icon: GraduationCap },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -582,15 +734,208 @@ export default function ClassDetailClient({ id }: { id: string }) {
         )}
 
         {activeTab === "results" && (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-            <GraduationCap size={48} className="mb-4 opacity-50" />
-            <p className="text-sm font-medium">
-              Tính năng ghi nhận kết quả và báo cáo học tập đang được hoàn
-              thiện.
-            </p>
-            <Button variant="outline" className="mt-6">
-              Nhập điểm thủ công
-            </Button>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <SummaryCard
+                title="Tổng học sinh"
+                value={periodicComments.length}
+                icon={Users}
+              />
+              <SummaryCard
+                title="Đã nhận xét"
+                value={periodicComments.filter((c) => c.comment).length}
+                icon={CheckCircle2}
+                color="text-green-600"
+              />
+              <SummaryCard
+                title="Chưa nhận xét"
+                value={periodicComments.filter((c) => !c.comment).length}
+                icon={AlertCircle}
+                color="text-orange-600"
+              />
+              <SummaryCard
+                title="Gói cao cấp"
+                value={
+                  periodicComments.filter((c) => isPremiumPlan(c.contracts))
+                    .length
+                }
+                icon={GraduationCap}
+                color="text-purple-600"
+              />
+            </div>
+
+            <Card className="p-4 bg-slate-50 border-slate-200">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex bg-white rounded-lg p-1 border border-slate-200">
+                  <button
+                    onClick={() => setPeriodType("WEEKLY")}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${periodType === "WEEKLY" ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"}`}
+                  >
+                    Theo Tuần
+                  </button>
+                  <button
+                    onClick={() => setPeriodType("MONTHLY")}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${periodType === "MONTHLY" ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"}`}
+                  >
+                    Theo Tháng
+                  </button>
+                </div>
+
+                <select
+                  className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 min-w-[200px]"
+                  value={periodKey}
+                  onChange={(e) => setPeriodKey(e.target.value)}
+                >
+                  {getPeriodOptions().map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20 min-w-[180px]"
+                  value={selectedTeacherId}
+                  onChange={(e) => setSelectedTeacherId(e.target.value)}
+                >
+                  <option value="">Tất cả giáo viên</option>
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.fullName}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="flex-1 min-w-[200px] relative">
+                  <Search
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    size={16}
+                  />
+                  <input
+                    placeholder="Tìm học sinh..."
+                    className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                    value={commentSearch}
+                    onChange={(e) => setCommentSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+            </Card>
+
+            <Card className="overflow-hidden">
+              {isCommentsLoading ? (
+                <div className="py-20 flex flex-col items-center gap-3 text-slate-400">
+                  <Loader2 className="animate-spin" size={32} />
+                  <p className="text-sm">Đang tải danh sách nhận xét...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                        <th className="px-6 py-4">Học sinh</th>
+                        <th className="px-6 py-4">Gói học</th>
+                        <th className="px-6 py-4">Trạng thái</th>
+                        <th className="px-6 py-4">Giáo viên</th>
+                        <th className="px-6 py-4">Cập nhật</th>
+                        <th className="px-6 py-4 text-right">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {periodicComments.map((item) => {
+                        const isPremium = isPremiumPlan(item.contracts);
+                        const hasComment = !!item.comment;
+                        return (
+                          <tr
+                            key={item.studentId}
+                            className="hover:bg-slate-50/30 transition-colors"
+                          >
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] font-bold">
+                                  {item.fullName?.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-700">
+                                    {item.fullName}
+                                  </p>
+                                  <p className="text-[10px] font-mono text-slate-400 uppercase">
+                                    {item.code}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              {isPremium && (
+                                <Badge
+                                  variant="warning"
+                                  className="text-[9px] uppercase tracking-tighter"
+                                >
+                                  Premium
+                                </Badge>
+                              )}
+                              <p className="text-xs text-slate-500 mt-1 truncate max-w-[150px]">
+                                {item.contracts?.[0]?.productName ||
+                                  "Gói thường"}
+                              </p>
+                            </td>
+                            <td className="px-6 py-4">
+                              {hasComment ? (
+                                <Badge
+                                  variant="success"
+                                  className="text-[9px] uppercase tracking-tighter gap-1"
+                                >
+                                  <CheckCircle2 size={10} /> Đã nhận xét
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] uppercase tracking-tighter text-slate-400 border-slate-200"
+                                >
+                                  Chưa nhận xét
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-600">
+                              {item.comment?.teacher?.fullName || "-"}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-400">
+                              {hasComment
+                                ? format(
+                                    new Date(item.comment.updatedAt),
+                                    "dd/MM/yyyy HH:mm",
+                                  )
+                                : "-"}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <Button
+                                variant={hasComment ? "ghost" : "outline"}
+                                size="sm"
+                                className="h-8 text-xs font-bold"
+                                onClick={() => handleOpenCommentModal(item)}
+                              >
+                                {hasComment ? "Sửa nhận xét" : "Thêm nhận xét"}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {periodicComments.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="py-20 text-center text-slate-400 text-sm italic"
+                          >
+                            {data.students?.length === 0
+                              ? "Lớp chưa có học sinh."
+                              : "Không tìm thấy học sinh phù hợp."}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
           </div>
         )}
       </div>
@@ -728,7 +1073,7 @@ export default function ClassDetailClient({ id }: { id: string }) {
                     <p className="text-sm">Đang tìm kiếm...</p>
                   </div>
                 ) : availableStudents.length > 0 ? (
-                  availableStudents.map((student) => {
+                  availableStudents.map((student: any) => {
                     const isSelected = selectedStudent?.id === student.id;
                     const isTransfer = student.classStudent?.length > 0;
                     const currentClassName =
@@ -797,18 +1142,11 @@ export default function ClassDetailClient({ id }: { id: string }) {
                   <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                     <p className="text-sm">Không tìm thấy học sinh phù hợp.</p>
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-20 text-slate-400 opacity-60">
-                    <Users size={32} className="mb-2" />
-                    <p className="text-sm">
-                      Nhập thông tin để bắt đầu tìm kiếm
-                    </p>
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4 bg-slate-50/30">
+            <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4 bg-slate-50/50">
               <Button
                 type="button"
                 variant="outline"
@@ -817,8 +1155,9 @@ export default function ClassDetailClient({ id }: { id: string }) {
                 Hủy
               </Button>
               <Button
-                onClick={() => handleEnrollStudent()}
+                type="button"
                 disabled={isSaving || !selectedStudent}
+                onClick={handleEnrollStudent}
                 className="gap-2 min-w-[140px]"
               >
                 {isSaving ? (
@@ -829,7 +1168,7 @@ export default function ClassDetailClient({ id }: { id: string }) {
                   </>
                 ) : (
                   <>
-                    <Plus size={18} /> Thêm học sinh
+                    <Plus size={18} /> Thêm vào lớp
                   </>
                 )}
               </Button>
@@ -837,7 +1176,185 @@ export default function ClassDetailClient({ id }: { id: string }) {
           </div>
         </div>
       )}
+
+      {showCommentModal && activeCommentStudent && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <form
+            onSubmit={handleSaveComment}
+            className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <GraduationCap size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    {activeCommentStudent.comment
+                      ? "Cập nhật nhận xét"
+                      : "Thêm nhận xét định kỳ"}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    {activeCommentStudent.fullName} •{" "}
+                    {periodType === "WEEKLY" ? "Tuần" : "Tháng"} {periodKey}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCommentModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-400 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Giáo viên nhận xét
+                  </label>
+                  <select
+                    required
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                    value={commentForm.teacherId}
+                    onChange={(e) =>
+                      setCommentForm({
+                        ...commentForm,
+                        teacherId: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Chọn giáo viên...</option>
+                    {teachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Nội dung nhận xét chung <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  required
+                  placeholder="Nhập nhận xét về tình hình học tập chung..."
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none"
+                  value={commentForm.content}
+                  onChange={(e) =>
+                    setCommentForm({ ...commentForm, content: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-green-600 uppercase tracking-wider">
+                    Điểm mạnh / Tiến bộ
+                  </label>
+                  <textarea
+                    placeholder="Những điểm học sinh làm tốt..."
+                    rows={3}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none bg-green-50/20"
+                    value={commentForm.strengths}
+                    onChange={(e) =>
+                      setCommentForm({
+                        ...commentForm,
+                        strengths: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-orange-600 uppercase tracking-wider">
+                    Cần cải thiện
+                  </label>
+                  <textarea
+                    placeholder="Những điểm cần lưu ý hoặc khắc phục..."
+                    rows={3}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none bg-orange-50/20"
+                    value={commentForm.improvements}
+                    onChange={(e) =>
+                      setCommentForm({
+                        ...commentForm,
+                        improvements: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-blue-600 uppercase tracking-wider">
+                  Định hướng / Bài tập tiếp theo
+                </label>
+                <textarea
+                  placeholder="Kế hoạch học tập hoặc yêu cầu cho kỳ tiếp theo..."
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none bg-blue-50/20"
+                  value={commentForm.nextSteps}
+                  onChange={(e) =>
+                    setCommentForm({ ...commentForm, nextSteps: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4 bg-slate-50/50">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCommentModal(false)}
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isSaving ||
+                  !commentForm.content.trim() ||
+                  !commentForm.teacherId
+                }
+              >
+                {isSaving ? "Đang lưu..." : "Lưu nhận xét"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  value,
+  icon: Icon,
+  color = "text-slate-900",
+}: any) {
+  const bgClass = color
+    .replace("text-", "bg-")
+    .replace("-600", "-100")
+    .replace("-500", "-100");
+  return (
+    <Card className="p-5 flex items-center gap-4 border-none bg-white shadow-sm hover:shadow-md transition-shadow">
+      <div
+        className={`w-12 h-12 rounded-2xl flex items-center justify-center ${bgClass} ${color}`}
+      >
+        <Icon size={24} />
+      </div>
+      <div>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          {title}
+        </p>
+        <p className={`text-2xl font-black ${color}`}>{value}</p>
+      </div>
+    </Card>
   );
 }
 
@@ -846,7 +1363,7 @@ function ClassEditField({
   value,
   onChange,
   type = "text",
-  required,
+  required = false,
 }: {
   label: string;
   value: string;
@@ -858,15 +1375,16 @@ function ClassEditField({
     <label className="text-sm text-slate-600">
       {label}
       <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
         required={required}
+        type={type}
         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
       />
     </label>
   );
 }
+
 
 function getClassStatusLabel(status: string) {
   const labels: Record<string, string> = {
