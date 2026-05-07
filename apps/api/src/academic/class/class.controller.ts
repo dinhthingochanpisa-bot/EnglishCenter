@@ -319,6 +319,16 @@ export class ClassController {
         data: { status: 'ACTIVE' },
       });
 
+      await this.ensureClassTask(tx, {
+        title: 'Onboarding học sinh vào lớp mới',
+        description: `Học sinh vừa được xếp vào lớp ${cls.name}. Cần rà soát lịch học, giáo trình, nhóm liên lạc phụ huynh và buổi học đầu tiên.`,
+        dueDate: this.daysFromNow(1),
+        priority: 'MEDIUM',
+        assigneeId: cls.teacherId || req.user.userId || req.user.id,
+        studentId: body.studentId,
+        classId: id,
+      });
+
       return classStudent;
     });
   }
@@ -362,6 +372,39 @@ export class ClassController {
 
       return { success: true };
     });
+  }
+
+  private daysFromNow(days: number) {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + days);
+    return dueDate;
+  }
+
+  private async ensureClassTask(
+    tx: any,
+    data: {
+      title: string;
+      description: string;
+      dueDate: Date;
+      priority: string;
+      assigneeId: string;
+      studentId: string;
+      classId: string;
+    },
+  ) {
+    const existing = await tx.task.findFirst({
+      where: {
+        title: data.title,
+        studentId: data.studentId,
+        classId: data.classId,
+        status: { notIn: ['DONE', 'CANCELLED'] },
+      },
+      select: { id: true },
+    });
+
+    if (existing) return existing;
+
+    return tx.task.create({ data });
   }
 
   @Get(':id/periodic-comments')

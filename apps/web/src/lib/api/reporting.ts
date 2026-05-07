@@ -61,6 +61,8 @@ export interface NotificationItem {
   centerName?: string;
   contractId?: string;
   leadId?: string;
+  studentId?: string;
+  classId?: string;
   sourceId?: string;
   actionUrl?: string;
   dueDate: string;

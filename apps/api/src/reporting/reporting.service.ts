@@ -73,10 +73,10 @@ export class ReportingService {
 
       // Total outstanding (sum of remainingAmount > 0)
       this.prisma.paymentSchedule.aggregate({
-        where: { 
-          contract: { ...where }, 
+        where: {
+          contract: { ...where },
           remainingAmount: { gt: 0 },
-          status: { notIn: ['CANCELLED', 'WAIVED'] } 
+          status: { notIn: ['CANCELLED', 'WAIVED'] },
         },
         _sum: { remainingAmount: true },
       }),
@@ -172,7 +172,9 @@ export class ReportingService {
     ]);
 
     const capacityStats = this.calculateCapacityStats(activeClassCapacity);
-    const renewalDueStudents = new Set(renewalDueContracts.map((item) => item.studentId)).size;
+    const renewalDueStudents = new Set(
+      renewalDueContracts.map((item) => item.studentId),
+    ).size;
 
     return {
       summary: {
@@ -218,7 +220,11 @@ export class ReportingService {
     };
   }
 
-  private getExecutiveScope(user: any, centerIdField: string = 'centerId', centerId?: string) {
+  private getExecutiveScope(
+    user: any,
+    centerIdField: string = 'centerId',
+    centerId?: string,
+  ) {
     if (centerId && centerId !== 'all') {
       return CenterScope.filter(user, centerIdField, centerId);
     }
@@ -256,7 +262,9 @@ export class ReportingService {
         ? Math.round((totalSeatsFilled / totalClassCapacity) * 1000) / 10
         : 0,
       scheduleFillRate: totalScheduleCapacity
-        ? Math.round((totalScheduleSeatsFilled / totalScheduleCapacity) * 1000) / 10
+        ? Math.round(
+            (totalScheduleSeatsFilled / totalScheduleCapacity) * 1000,
+          ) / 10
         : 0,
     };
   }
@@ -290,13 +298,15 @@ export class ReportingService {
 
     for (const exam of realExams) {
       const key = this.monthKey(exam.scheduledAt);
-      if (!realExamStudentsByMonth.has(key)) realExamStudentsByMonth.set(key, new Set());
+      if (!realExamStudentsByMonth.has(key))
+        realExamStudentsByMonth.set(key, new Set());
       realExamStudentsByMonth.get(key)?.add(exam.studentId);
     }
 
     for (const exam of mockExams) {
       const key = this.monthKey(exam.scheduledAt);
-      if (!mockTestStudentsByMonth.has(key)) mockTestStudentsByMonth.set(key, new Set());
+      if (!mockTestStudentsByMonth.has(key))
+        mockTestStudentsByMonth.set(key, new Set());
       mockTestStudentsByMonth.get(key)?.add(exam.studentId);
     }
 
@@ -317,7 +327,13 @@ export class ReportingService {
   ) {
     const buckets = new Map<
       string,
-      { month: string; leads: number; contracts: number; contractValue: number; cashIn: number }
+      {
+        month: string;
+        leads: number;
+        contracts: number;
+        contractValue: number;
+        cashIn: number;
+      }
     >();
 
     for (
@@ -359,7 +375,10 @@ export class ReportingService {
   private buildReceivableStatus(
     schedules: Array<{ status: string; remainingAmount: any }>,
   ) {
-    const buckets = new Map<string, { status: string; count: number; amount: number }>();
+    const buckets = new Map<
+      string,
+      { status: string; count: number; amount: number }
+    >();
     for (const schedule of schedules) {
       const bucket = buckets.get(schedule.status) || {
         status: schedule.status,
@@ -437,33 +456,37 @@ export class ReportingService {
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
 
-    const [activeClasses, classByStatusRaw, atRiskStudents, recentAttendanceRaw] =
-      await Promise.all([
-        // Active classes
-        this.prisma.class.count({ where: { ...where, status: 'ACTIVE' } }),
+    const [
+      activeClasses,
+      classByStatusRaw,
+      atRiskStudents,
+      recentAttendanceRaw,
+    ] = await Promise.all([
+      // Active classes
+      this.prisma.class.count({ where: { ...where, status: 'ACTIVE' } }),
 
-        // Classes by status
-        this.prisma.class.groupBy({
-          by: ['status'],
-          where,
-          _count: { id: true },
-        }),
+      // Classes by status
+      this.prisma.class.groupBy({
+        by: ['status'],
+        where,
+        _count: { id: true },
+      }),
 
-        // Students on HOLD (at risk)
-        this.prisma.student.count({
-          where: { ...where, status: 'HOLD' },
-        }),
+      // Students on HOLD (at risk)
+      this.prisma.student.count({
+        where: { ...where, status: 'HOLD' },
+      }),
 
-        // Recent attendance (last 7 days) — count absent/late
-        this.prisma.attendance.groupBy({
-          by: ['status'],
-          where: {
-            class: { ...where },
-            date: { gte: sevenDaysAgo },
-          },
-          _count: { id: true },
-        }),
-      ]);
+      // Recent attendance (last 7 days) — count absent/late
+      this.prisma.attendance.groupBy({
+        by: ['status'],
+        where: {
+          class: { ...where },
+          date: { gte: sevenDaysAgo },
+        },
+        _count: { id: true },
+      }),
+    ]);
 
     return {
       activeClasses,
@@ -546,12 +569,8 @@ export class ReportingService {
     familyInsights.sort((a, b) => b.totalOutstanding - a.totalOutstanding);
 
     return {
-      highBalanceFamilies: familyInsights.filter(
-        (f) => f.totalOutstanding > 0,
-      ),
-      multiChildFamilies: familyInsights.filter(
-        (f) => f.activeChildren >= 2,
-      ),
+      highBalanceFamilies: familyInsights.filter((f) => f.totalOutstanding > 0),
+      multiChildFamilies: familyInsights.filter((f) => f.activeChildren >= 2),
       upcomingRenewalFamilies: familyInsights.filter(
         (f) => f.upcomingRenewals > 0,
       ),
@@ -567,10 +586,43 @@ export class ReportingService {
       this.prisma.task.findMany({
         where: {
           status: { in: ['TODO', 'IN_PROGRESS'] },
-          OR: [{ lead: where }, { opportunity: { lead: where } }],
+          OR: [
+            { lead: where },
+            { opportunity: { lead: where } },
+            { student: where },
+            { contract: where },
+            { class: where },
+          ],
         },
         include: {
           assignee: { select: { fullName: true } },
+          student: {
+            select: {
+              id: true,
+              fullName: true,
+              code: true,
+              centerId: true,
+              center: { select: { name: true } },
+            },
+          },
+          contract: {
+            select: {
+              id: true,
+              code: true,
+              centerId: true,
+              center: { select: { name: true } },
+              student: { select: { id: true, fullName: true, code: true } },
+            },
+          },
+          class: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              centerId: true,
+              center: { select: { name: true } },
+            },
+          },
           lead: {
             select: {
               id: true,
@@ -598,6 +650,7 @@ export class ReportingService {
         take: 30,
       }),
 
+      // Overdue receivables
       this.prisma.paymentSchedule.findMany({
         where: {
           contract: { ...where },
@@ -616,6 +669,7 @@ export class ReportingService {
         take: 20,
       }),
 
+      // Course ending in 30 days without a pending/approved renewal
       this.prisma.contract.findMany({
         where: {
           ...where,
@@ -634,6 +688,17 @@ export class ReportingService {
 
     const taskNotifications = openTasks.map((task) => {
       const lead = task.lead || task.opportunity?.lead;
+      const student = task.student || task.contract?.student;
+      const taskCenterId =
+        lead?.centerId ||
+        task.student?.centerId ||
+        task.contract?.centerId ||
+        task.class?.centerId;
+      const taskCenterName =
+        lead?.center?.name ||
+        task.student?.center?.name ||
+        task.contract?.center?.name ||
+        task.class?.center?.name;
       const dueDate = task.dueDate || task.createdAt;
       const isOverdue = dueDate && dueDate < now;
       return {
@@ -650,17 +715,31 @@ export class ReportingService {
           lead?.prospectiveStudentName || lead?.parent?.fullName
             ? `Hồ sơ: ${lead?.prospectiveStudentName || lead?.parent?.fullName}`
             : null,
+          student?.fullName ? `Hoc sinh: ${student.fullName}` : null,
+          task.contract?.code ? `Hop dong: ${task.contract.code}` : null,
+          task.class?.name ? `Lop: ${task.class.name}` : null,
           task.assignee?.fullName
             ? `Người phụ trách: ${task.assignee.fullName}`
             : null,
         ]
           .filter(Boolean)
           .join(' • '),
-        centerId: lead?.centerId,
-        centerName: lead?.center?.name,
+        centerId: taskCenterId,
+        centerName: taskCenterName,
         sourceId: task.id,
         leadId: lead?.id,
-        actionUrl: lead?.id ? `/leads/${lead.id}` : '/leads',
+        studentId: student?.id,
+        contractId: task.contractId,
+        classId: task.classId,
+        actionUrl: lead?.id
+          ? `/leads/${lead.id}`
+          : student?.id
+            ? `/students/${student.id}`
+            : task.contractId
+              ? `/academic/contracts?id=${task.contractId}`
+              : task.classId
+                ? `/academic/classes/${task.classId}`
+                : '/dashboard',
         dueDate,
       };
     });
@@ -671,7 +750,7 @@ export class ReportingService {
         type: 'OVERDUE_RECEIVABLE',
         priority: 'HIGH',
         title: `Công nợ quá hạn: ${s.contract.student.fullName}`,
-        body: `Còn nợ ${Number(s.remainingAmount).toLocaleString()} ₫ - hạn ${new Date(s.dueDate).toLocaleDateString('vi-VN')}`,
+        body: `Còn nợ ${Number(s.remainingAmount).toLocaleString()} ₫ — hạn ${new Date(s.dueDate).toLocaleDateString('vi-VN')}`,
         centerId: s.contract.centerId,
         centerName: s.contract.center?.name,
         contractId: s.contractId,

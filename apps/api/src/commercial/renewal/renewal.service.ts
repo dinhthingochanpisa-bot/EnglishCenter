@@ -171,6 +171,7 @@ export class RenewalService {
   async createRenewal(contractId: string, userId: string, user: any) {
     const contract = await this.prisma.contract.findUnique({
       where: { id: contractId },
+      include: { student: { select: { fullName: true, code: true } } },
     });
 
     if (!contract) throw new NotFoundException('Hợp đồng không tồn tại');
@@ -214,7 +215,49 @@ export class RenewalService {
         contract.centerId,
       );
 
+      await this.ensureRenewalTask(tx, {
+        title: 'Tư vấn gia hạn hợp đồng',
+        description: `Hợp đồng ${contract.code} của ${contract.student.fullName} đã được đưa vào danh sách gia hạn. Cần liên hệ phụ huynh và cập nhật phương án tái tục.`,
+        dueDate: this.daysFromNow(2),
+        priority: 'HIGH',
+        assigneeId: contract.ownerId || userId,
+        studentId: contract.studentId,
+        contractId: contract.id,
+      });
+
       return renewal;
     });
+  }
+
+  private daysFromNow(days: number) {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + days);
+    return dueDate;
+  }
+
+  private async ensureRenewalTask(
+    tx: any,
+    data: {
+      title: string;
+      description: string;
+      dueDate: Date;
+      priority: string;
+      assigneeId: string;
+      studentId: string;
+      contractId: string;
+    },
+  ) {
+    const existing = await tx.task.findFirst({
+      where: {
+        title: data.title,
+        contractId: data.contractId,
+        status: { notIn: ['DONE', 'CANCELLED'] },
+      },
+      select: { id: true },
+    });
+
+    if (existing) return existing;
+
+    return tx.task.create({ data });
   }
 }

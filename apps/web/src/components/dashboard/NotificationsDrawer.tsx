@@ -108,9 +108,13 @@ const NotificationCard: React.FC<{ item: NotificationItem; onClose: () => void }
     item.actionUrl ||
     (item.leadId
       ? `/leads/${item.leadId}`
+      : item.studentId
+        ? `/students/${item.studentId}`
       : item.contractId
         ? `/academic/contracts?id=${item.contractId}`
-        : '/dashboard');
+        : item.classId
+          ? `/academic/classes/${item.classId}`
+          : '/dashboard');
   
   return (
     <div className={clsx(

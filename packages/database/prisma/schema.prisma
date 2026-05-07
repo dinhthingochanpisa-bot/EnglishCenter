@@ -215,6 +215,7 @@ model Student {
   classStudent ClassStudent[]
   attendance      Attendance[]
   academicResults AcademicResult[]
+  tasks        Task[]
   progressNotes   ProgressNote[]
   careEvents   StudentCareEvent[]
   examEvents   StudentExamEvent[]
@@ -541,10 +542,20 @@ model Task {
   lead        Lead?      @relation(fields: [leadId], references: [id])
   opportunityId String?
   opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  studentId   String?
+  student     Student?   @relation(fields: [studentId], references: [id])
+  contractId  String?
+  contract    Contract?  @relation(fields: [contractId], references: [id])
+  classId     String?
+  class       Class?     @relation(fields: [classId], references: [id])
   assigneeId  String
   assignee    User       @relation("TaskAssignee", fields: [assigneeId], references: [id])
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+
+  @@index([studentId])
+  @@index([contractId])
+  @@index([classId])
 }
 
 enum TaskStatus {
@@ -670,6 +681,7 @@ model Class {
   enrollments Enrollment[]
   attendance    Attendance[]
   academicResults AcademicResult[]
+  tasks          Task[]
   progressNotes   ProgressNote[]
   careEvents   StudentCareEvent[]
   examEvents   StudentExamEvent[]
@@ -990,6 +1002,7 @@ model Contract {
   renewalsNew    Renewal[]      @relation("NewContract")
   examEvents     StudentExamEvent[]
   warrantyCases  WarrantyCase[]
+  tasks          Task[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
