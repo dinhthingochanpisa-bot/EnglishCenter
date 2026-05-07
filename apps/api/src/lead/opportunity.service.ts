@@ -249,6 +249,25 @@ export class OpportunityService {
       data: { status },
     });
 
+    if (status === OpportunityStatus.CHECKIN_DONE) {
+      const assigneeId = await this.findOperationalAssignee(
+        this.prisma,
+        opp.lead.centerId,
+        ['ACADEMIC', 'MANAGER', 'SUPER_ADMIN'],
+        opp.lead.ownerId,
+      );
+      await this.ensureOperationalTask(this.prisma, {
+        leadId: opp.leadId,
+        opportunityId: id,
+        assigneeId,
+        title: 'Chấm/nhập kết quả test đầu vào',
+        description:
+          'Lead đã check-in. Giáo vụ/giáo viên cần chấm hoặc nhập kết quả test đầu vào để chuyển sang bước xếp lớp.',
+        dueDate: this.daysFromNow(1),
+        priority: 'HIGH',
+      });
+    }
+
     await this.prisma.auditLog.create({
       data: {
         actorId: user.id,
@@ -351,6 +370,23 @@ export class OpportunityService {
         await this.syncPlacementResultFromTestEvent(tx, student.id, testEvent);
       }
 
+      const assigneeId = await this.findOperationalAssignee(
+        tx,
+        opp.lead.centerId,
+        ['ACADEMIC', 'MANAGER', 'SUPER_ADMIN'],
+        opp.lead.ownerId,
+      );
+      await this.ensureOperationalTask(tx, {
+        leadId: opp.leadId,
+        opportunityId: id,
+        assigneeId,
+        title: 'Đề xuất lớp sau test đầu vào',
+        description:
+          'Đã có kết quả test đầu vào. Giáo vụ cần đề xuất lớp học thử hoặc lớp phù hợp cho học sinh.',
+        dueDate: this.daysFromNow(1),
+        priority: 'HIGH',
+      });
+
       return testEvent;
     });
   }
@@ -395,6 +431,17 @@ export class OpportunityService {
           afterData: { studentId: student.id, classId: payload.classId },
           centerId: opp.lead.centerId,
         },
+      });
+
+      await this.ensureOperationalTask(tx, {
+        leadId: opp.leadId,
+        opportunityId: id,
+        assigneeId: opp.lead.ownerId,
+        title: 'Follow-up phụ huynh sau học thử',
+        description:
+          'Học sinh đã được xếp lớp học thử. Sales/CS cần theo dõi buổi học thử và follow-up phụ huynh để chốt lộ trình.',
+        dueDate: this.daysFromNow(1),
+        priority: 'MEDIUM',
       });
 
       return { student };
@@ -609,6 +656,23 @@ export class OpportunityService {
           },
           centerId: opp.lead.centerId,
         },
+      });
+
+      const assigneeId = await this.findOperationalAssignee(
+        tx,
+        opp.lead.centerId,
+        ['ACADEMIC', 'MANAGER', 'SUPER_ADMIN'],
+        opp.lead.ownerId,
+      );
+      await this.ensureOperationalTask(tx, {
+        leadId: opp.leadId,
+        opportunityId: id,
+        assigneeId,
+        title: 'Chấm/nhập kết quả test đầu vào',
+        description:
+          'Hồ sơ sau check-in đã được cập nhật. Giáo vụ/giáo viên cần chấm hoặc nhập kết quả test đầu vào.',
+        dueDate: this.daysFromNow(1),
+        priority: 'HIGH',
       });
 
       return { parent, student, familyId, lead };
@@ -1246,6 +1310,17 @@ export class OpportunityService {
         },
       });
 
+      await this.ensureOperationalTask(tx, {
+        leadId: opp.leadId,
+        opportunityId: id,
+        assigneeId: opp.lead.ownerId,
+        title: 'Hoàn tất checklist bàn giao sau chốt',
+        description:
+          'Lead đã chốt thành công. Cần hoàn tất hồ sơ, hướng dẫn thanh toán, bàn giao giáo vụ và add nhóm phụ huynh.',
+        dueDate: this.daysFromNow(2),
+        priority: 'HIGH',
+      });
+
       // --- 4. Audit Log ---
       await tx.auditLog.create({
         data: {
@@ -1314,5 +1389,73 @@ export class OpportunityService {
         `Vui lòng hoàn thiện thông tin check-in trước khi chuyển bước: ${missingFields.join(', ')}`,
       );
     }
+  }
+
+  private daysFromNow(days: number) {
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
+
+  private async findOperationalAssignee(
+    tx: any,
+    centerId: string,
+    roleCodes: string[],
+    fallbackUserId: string,
+  ) {
+    const user = await tx.user.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          {
+            role: { code: { in: roleCodes } },
+            centers: { some: { centerId } },
+          },
+          {
+            userRoles: {
+              some: {
+                isActive: true,
+                role: { code: { in: roleCodes } },
+                centers: { some: { centerId } },
+              },
+            },
+          },
+          {
+            role: { code: 'SUPER_ADMIN' },
+          },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return user?.id || fallbackUserId;
+  }
+
+  private async ensureOperationalTask(
+    tx: any,
+    data: {
+      leadId: string;
+      opportunityId: string;
+      assigneeId: string;
+      title: string;
+      description: string;
+      dueDate: Date;
+      priority: string;
+    },
+  ) {
+    const existing = await tx.task.findFirst({
+      where: {
+        leadId: data.leadId,
+        opportunityId: data.opportunityId,
+        title: data.title,
+        status: { notIn: ['DONE', 'CANCELLED'] },
+      },
+      select: { id: true },
+    });
+
+    if (existing) return existing;
+
+    return tx.task.create({
+      data,
+    });
   }
 }

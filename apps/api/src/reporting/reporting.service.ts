@@ -563,8 +563,41 @@ export class ReportingService {
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 86400000);
 
-    const [overdueReceivables, courseEndWarnings] = await Promise.all([
-      // Overdue receivables
+    const [openTasks, overdueReceivables, courseEndWarnings] = await Promise.all([
+      this.prisma.task.findMany({
+        where: {
+          status: { in: ['TODO', 'IN_PROGRESS'] },
+          OR: [{ lead: where }, { opportunity: { lead: where } }],
+        },
+        include: {
+          assignee: { select: { fullName: true } },
+          lead: {
+            select: {
+              id: true,
+              centerId: true,
+              prospectiveStudentName: true,
+              parent: { select: { fullName: true } },
+              center: { select: { name: true } },
+            },
+          },
+          opportunity: {
+            select: {
+              lead: {
+                select: {
+                  id: true,
+                  centerId: true,
+                  prospectiveStudentName: true,
+                  parent: { select: { fullName: true } },
+                  center: { select: { name: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+        take: 30,
+      }),
+
       this.prisma.paymentSchedule.findMany({
         where: {
           contract: { ...where },
@@ -583,7 +616,6 @@ export class ReportingService {
         take: 20,
       }),
 
-      // Course ending in 30 days without a pending/approved renewal
       this.prisma.contract.findMany({
         where: {
           ...where,
@@ -600,15 +632,50 @@ export class ReportingService {
       }),
     ]);
 
+    const taskNotifications = openTasks.map((task) => {
+      const lead = task.lead || task.opportunity?.lead;
+      const dueDate = task.dueDate || task.createdAt;
+      const isOverdue = dueDate && dueDate < now;
+      return {
+        type: 'OPERATIONAL_TASK',
+        priority:
+          task.priority === 'URGENT' || task.priority === 'HIGH' || isOverdue
+            ? 'HIGH'
+            : task.priority === 'LOW'
+              ? 'LOW'
+              : 'MEDIUM',
+        title: task.title,
+        body: [
+          task.description,
+          lead?.prospectiveStudentName || lead?.parent?.fullName
+            ? `Hồ sơ: ${lead?.prospectiveStudentName || lead?.parent?.fullName}`
+            : null,
+          task.assignee?.fullName
+            ? `Người phụ trách: ${task.assignee.fullName}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' • '),
+        centerId: lead?.centerId,
+        centerName: lead?.center?.name,
+        sourceId: task.id,
+        leadId: lead?.id,
+        actionUrl: lead?.id ? `/leads/${lead.id}` : '/leads',
+        dueDate,
+      };
+    });
+
     const notifications: any[] = [
+      ...taskNotifications,
       ...overdueReceivables.map((s) => ({
         type: 'OVERDUE_RECEIVABLE',
         priority: 'HIGH',
         title: `Công nợ quá hạn: ${s.contract.student.fullName}`,
-        body: `Còn nợ ${Number(s.remainingAmount).toLocaleString()} ₫ — hạn ${new Date(s.dueDate).toLocaleDateString('vi-VN')}`,
+        body: `Còn nợ ${Number(s.remainingAmount).toLocaleString()} ₫ - hạn ${new Date(s.dueDate).toLocaleDateString('vi-VN')}`,
         centerId: s.contract.centerId,
         centerName: s.contract.center?.name,
         contractId: s.contractId,
+        actionUrl: `/academic/payments?contractId=${s.contractId}`,
         dueDate: s.dueDate,
       })),
       ...courseEndWarnings.map((c) => ({
@@ -619,6 +686,7 @@ export class ReportingService {
         centerId: c.centerId,
         centerName: c.center?.name,
         contractId: c.id,
+        actionUrl: '/academic/renewals',
         dueDate: c.endDate,
       })),
     ];

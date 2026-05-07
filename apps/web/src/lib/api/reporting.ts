@@ -53,13 +53,16 @@ export interface ExecutiveDashboardData {
 }
 
 export interface NotificationItem {
-  type: 'OVERDUE_RECEIVABLE' | 'COURSE_END_WARNING';
+  type: 'OPERATIONAL_TASK' | 'OVERDUE_RECEIVABLE' | 'COURSE_END_WARNING';
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   title: string;
   body: string;
-  centerId: string;
-  centerName: string;
-  contractId: string;
+  centerId?: string;
+  centerName?: string;
+  contractId?: string;
+  leadId?: string;
+  sourceId?: string;
+  actionUrl?: string;
   dueDate: string;
 }
 

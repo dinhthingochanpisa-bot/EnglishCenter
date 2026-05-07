@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { reportingApi, NotificationData, NotificationItem } from '@/lib/api/reporting';
+import { useCenterScope } from '@/providers/CenterScopeProvider';
 import { clsx } from 'clsx';
 import Link from 'next/link';
 
@@ -20,6 +21,7 @@ interface NotificationsDrawerProps {
 }
 
 export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ isOpen, onClose }) => {
+  const { selectedCenterId } = useCenterScope();
   const [data, setData] = useState<NotificationData | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,7 +30,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ isOpen
       const fetchNotifications = async () => {
         setLoading(true);
         try {
-          const result = await reportingApi.getNotifications();
+          const result = await reportingApi.getNotifications(selectedCenterId);
           setData(result);
         } catch (error) {
           console.error('Failed to fetch notifications:', error);
@@ -38,7 +40,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ isOpen
       };
       fetchNotifications();
     }
-  }, [isOpen]);
+  }, [isOpen, selectedCenterId]);
 
   if (!isOpen) return null;
 
@@ -102,6 +104,13 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ isOpen
 
 const NotificationCard: React.FC<{ item: NotificationItem; onClose: () => void }> = ({ item, onClose }) => {
   const isHigh = item.priority === 'HIGH';
+  const actionUrl =
+    item.actionUrl ||
+    (item.leadId
+      ? `/leads/${item.leadId}`
+      : item.contractId
+        ? `/academic/contracts?id=${item.contractId}`
+        : '/dashboard');
   
   return (
     <div className={clsx(
@@ -134,8 +143,8 @@ const NotificationCard: React.FC<{ item: NotificationItem; onClose: () => void }
             <span className="text-[10px] font-medium text-slate-400 italic">
                Hạn: {new Date(item.dueDate).toLocaleDateString('vi-VN')}
             </span>
-            <Link 
-              href={`/academic/contracts?id=${item.contractId}`}
+            <Link
+              href={actionUrl}
               onClick={onClose}
               className="flex items-center gap-1 text-[10px] font-black text-primary uppercase hover:underline"
             >
