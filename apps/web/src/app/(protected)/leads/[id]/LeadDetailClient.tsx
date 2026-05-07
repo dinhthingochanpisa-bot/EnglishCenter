@@ -283,6 +283,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
     nextAction: '',
     dueDate: '',
   });
+  const [checkinErrors, setCheckinErrors] = useState<Record<string, string>>({});
   const [checkinProfileForm, setCheckinProfileForm] = useState({
     parentFullName: '',
     parentPhone: '',
@@ -575,9 +576,48 @@ export default function LeadDetailClient({ id }: { id: string }) {
     }
   };
 
+  const validateCheckinForm = () => {
+    const errors: Record<string, string> = {};
+    if (!checkinProfileForm.parentFullName.trim()) errors.parentFullName = 'Vui lòng nhập họ tên phụ huynh';
+    if (!checkinProfileForm.parentPhone.trim()) errors.parentPhone = 'Vui lòng nhập số điện thoại';
+    if (!checkinProfileForm.relationship.trim()) errors.relationship = 'Vui lòng chọn vai trò';
+    if (!checkinProfileForm.studentFullName.trim()) errors.studentFullName = 'Vui lòng nhập họ tên học sinh';
+
+    setCheckinErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const updateCheckinProfileField = (
+    field: keyof typeof checkinProfileForm,
+    value: string,
+  ) => {
+    setCheckinProfileForm((form) => ({ ...form, [field]: value }));
+    setCheckinErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const isCheckinIncomplete = useMemo(() => {
+    if (!lead) return true;
+    return (
+      !lead.parent?.fullName?.trim() ||
+      !lead.parent?.phone?.trim() ||
+      !lead.prospectiveStudentName?.trim() ||
+      !lead.centerId
+    );
+  }, [lead]);
+
   const handleSaveCheckinProfile = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!primaryOpportunity) return;
+
+    if (!validateCheckinForm()) {
+      setError('Vui lòng hoàn thiện các trường bắt buộc trong hồ sơ check-in.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -603,6 +643,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
           },
         }),
       });
+      setCheckinErrors({});
       await fetchLead();
     } catch (err: any) {
       setError(err.message || 'Không thể lưu hồ sơ sau check-in');
@@ -638,6 +679,13 @@ export default function LeadDetailClient({ id }: { id: string }) {
     event.preventDefault();
     if (!primaryOpportunity) return;
 
+    if (isCheckinIncomplete) {
+      setError('Vui lòng hoàn thiện hồ sơ check-in trước khi xếp lớp học thử.');
+      const checkinSection = document.getElementById('checkin-section');
+      if (checkinSection) checkinSection.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
     try {
@@ -655,6 +703,13 @@ export default function LeadDetailClient({ id }: { id: string }) {
 
   const handleMarkWon = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (isCheckinIncomplete) {
+      setError('Vui lòng hoàn thiện hồ sơ check-in trước khi chốt thành công.');
+      const checkinSection = document.getElementById('checkin-section');
+      if (checkinSection) checkinSection.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
     try {
@@ -974,12 +1029,23 @@ export default function LeadDetailClient({ id }: { id: string }) {
   };
 
   const configuredListPrice = Number(wonQuote?.listPrice ?? wonForm.amount ?? 0);
-  const configuredDiscountPercent = percentInputToNumber(wonForm.discountPercent);
-  const configuredPercentDiscount = configuredListPrice * (configuredDiscountPercent / 100);
-  const configuredOtherDiscount = Math.max(
-    0,
-    Number(wonQuote?.totalDiscount ?? 0) - configuredPercentDiscount,
-  );
+  const quoteBreakdown = Array.isArray(wonQuote?.breakdown)
+    ? wonQuote.breakdown
+    : [];
+  const configuredBaseDiscount = quoteBreakdown.length
+    ? quoteBreakdown
+        .filter((item: any) => !wonForm.promotionCodes.includes(item?.code))
+        .reduce((sum: number, item: any) => sum + Number(item?.amount || 0), 0)
+    : configuredListPrice * (percentInputToNumber(wonForm.discountPercent) / 100);
+  const configuredTotalDiscount = Number(wonQuote?.totalDiscount ?? 0);
+  const configuredPromotionDiscount = quoteBreakdown.length
+    ? quoteBreakdown
+        .filter((item: any) => wonForm.promotionCodes.includes(item?.code))
+        .reduce(
+        (sum: number, item: any) => sum + Number(item?.amount || 0),
+        0,
+      )
+    : 0;
   const configuredFinalAmount = Number(wonQuote?.finalAmount ?? wonForm.amount ?? 0);
 
   if (isLoading && !lead) {
@@ -1151,15 +1217,19 @@ export default function LeadDetailClient({ id }: { id: string }) {
 
           <div className="lg:col-span-2 space-y-6">
             {primaryOpportunity?.status === 'CHECKIN_DONE' && (
-              <Card className="p-6 border-blue-100 bg-blue-50/30">
+              <Card id="checkin-section" className="p-6 border-blue-100 bg-blue-50/30">
                 <div className="mb-5 flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="font-semibold text-slate-900">Hồ sơ sau check-in</h3>
+                    <h3 className="font-semibold text-slate-900">Thông tin hồ sơ sau check-in</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      Nhập và xác nhận thông tin phụ huynh, học sinh để tạo hồ sơ học viên chính thức.
+                      Bắt buộc hoàn thiện để đưa vào lộ trình học tập, xếp lớp hoặc chốt hợp đồng.
                     </p>
                   </div>
-                  <Badge variant="primary">Đã check-in</Badge>
+                  {isCheckinIncomplete ? (
+                    <Badge variant="warning">Chưa hoàn thiện</Badge>
+                  ) : (
+                    <Badge variant="success">Đã hoàn thiện</Badge>
+                  )}
                 </div>
 
                 <form onSubmit={handleSaveCheckinProfile} className="space-y-5">
@@ -1169,14 +1239,14 @@ export default function LeadDetailClient({ id }: { id: string }) {
                       <LabeledInput
                         label="Họ và tên *"
                         value={checkinProfileForm.parentFullName}
-                        onChange={(value) => setCheckinProfileForm((form) => ({ ...form, parentFullName: value }))}
-                        required
+                        onChange={(value) => updateCheckinProfileField('parentFullName', value)}
+                        error={checkinErrors.parentFullName}
                       />
                       <LabeledInput
                         label="Số điện thoại *"
                         value={checkinProfileForm.parentPhone}
-                        onChange={(value) => setCheckinProfileForm((form) => ({ ...form, parentPhone: value }))}
-                        required
+                        onChange={(value) => updateCheckinProfileField('parentPhone', value)}
+                        error={checkinErrors.parentPhone}
                       />
                       <LabeledInput
                         label="Email"
@@ -1184,20 +1254,13 @@ export default function LeadDetailClient({ id }: { id: string }) {
                         onChange={(value) => setCheckinProfileForm((form) => ({ ...form, parentEmail: value }))}
                         type="email"
                       />
-                      <div>
-                        <label className="text-sm text-slate-500">Quan hệ với học sinh</label>
-                        <select
-                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                          value={checkinProfileForm.relationship}
-                          onChange={(event) => setCheckinProfileForm((form) => ({ ...form, relationship: event.target.value }))}
-                        >
-                          <option value="Phụ huynh">Phụ huynh</option>
-                          <option value="Cha">Cha</option>
-                          <option value="Mẹ">Mẹ</option>
-                          <option value="Người giám hộ">Người giám hộ</option>
-                          <option value="Học sinh tự liên hệ">Học sinh tự liên hệ</option>
-                        </select>
-                      </div>
+                      <ConfigSelect
+                        label="Quan hệ với học sinh *"
+                        value={checkinProfileForm.relationship}
+                        options={['Phụ huynh', 'Bố', 'Mẹ', 'Ông bà', 'Anh chị', 'Người giám hộ', 'Học sinh tự liên hệ']}
+                        onChange={(value) => updateCheckinProfileField('relationship', value)}
+                        error={checkinErrors.relationship}
+                      />
                     </div>
                     <LabeledInput
                       label="Địa chỉ"
@@ -1212,8 +1275,8 @@ export default function LeadDetailClient({ id }: { id: string }) {
                       <LabeledInput
                         label="Họ tên học sinh *"
                         value={checkinProfileForm.studentFullName}
-                        onChange={(value) => setCheckinProfileForm((form) => ({ ...form, studentFullName: value }))}
-                        required
+                        onChange={(value) => updateCheckinProfileField('studentFullName', value)}
+                        error={checkinErrors.studentFullName}
                       />
                       <LabeledInput
                         label="Ngày sinh"
@@ -1457,8 +1520,8 @@ export default function LeadDetailClient({ id }: { id: string }) {
                   <div className="rounded-lg border border-indigo-100 bg-white p-4 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Gia sau cau hinh</p>
-                        <p className="mt-1 text-xl font-bold text-slate-900">
+                        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Giá sau cấu hình (Thực đóng)</p>
+                        <p className="mt-1 text-xl font-bold text-indigo-600">
                           {formatMoney(configuredFinalAmount)}
                         </p>
                       </div>
@@ -1467,21 +1530,25 @@ export default function LeadDetailClient({ id }: { id: string }) {
                     {wonQuoteError ? (
                       <p className="mt-2 text-red-600">{wonQuoteError}</p>
                     ) : wonQuote ? (
-                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-5">
                         <div>
-                          <span className="text-slate-500">HP niem yet</span>
+                          <span className="text-slate-500">Giá niêm yết</span>
                           <div className="font-semibold">{formatMoney(configuredListPrice)}</div>
                         </div>
                         <div>
-                          <span className="text-slate-500">HP giam tru tu CK%</span>
-                          <div className="font-semibold">{formatMoney(configuredPercentDiscount)}</div>
+                          <span className="text-slate-500">Giảm CK%</span>
+                          <div className="font-semibold">{formatMoney(configuredBaseDiscount)}</div>
                         </div>
                         <div>
-                          <span className="text-slate-500">Giam gia CTKM khac</span>
-                          <div className="font-semibold">{formatMoney(configuredOtherDiscount)}</div>
+                          <span className="text-slate-500">Khuyến mãi</span>
+                          <div className="font-semibold">{formatMoney(configuredPromotionDiscount)}</div>
                         </div>
                         <div>
-                          <span className="text-slate-500">HP thuc dong</span>
+                          <span className="text-slate-500">Tổng giảm</span>
+                          <div className="font-semibold">{formatMoney(configuredTotalDiscount)}</div>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Giá thực đóng</span>
                           <div className="font-semibold text-emerald-700">{formatMoney(configuredFinalAmount)}</div>
                         </div>
                       </div>
@@ -1986,23 +2053,28 @@ function LabeledInput({
   onChange,
   type = 'text',
   required,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   required?: boolean;
+  error?: string;
 }) {
   return (
     <div>
       <label className="text-sm text-slate-500">{label}</label>
       <input
         type={type}
-        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+        className={`mt-1 w-full rounded-lg border ${
+          error ? 'border-red-500 ring-1 ring-red-100' : 'border-slate-200'
+        } bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
       />
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }
@@ -2015,6 +2087,7 @@ function ConfigSelect({
   emptyLabel = 'Chon',
   valueResolver = (option) => option,
   labelResolver = (option) => option,
+  error,
 }: {
   label: string;
   value: string;
@@ -2023,12 +2096,15 @@ function ConfigSelect({
   emptyLabel?: string;
   valueResolver?: (option: string) => string;
   labelResolver?: (option: string) => string;
+  error?: string;
 }) {
   return (
     <div>
       <label className="text-sm text-slate-500">{label}</label>
       <select
-        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+        className={`mt-1 w-full rounded-lg border ${
+          error ? 'border-red-500 ring-1 ring-red-100' : 'border-slate-200'
+        } bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -2042,6 +2118,7 @@ function ConfigSelect({
           );
         })}
       </select>
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }

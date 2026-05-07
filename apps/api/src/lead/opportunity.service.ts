@@ -363,6 +363,7 @@ export class OpportunityService {
       });
       if (!opp) throw new NotFoundException('Opportunity not found');
       CenterScope.validate(user, opp.lead.centerId);
+      this.validateCheckinInfo(opp.lead);
 
       if (opp.status !== OpportunityStatus.TRIAL_DONE) {
         throw new BadRequestException(
@@ -1036,6 +1037,8 @@ export class OpportunityService {
       const targetCenterId = payload.centerId || opp.lead.centerId;
       CenterScope.validate(user, targetCenterId);
 
+      this.validateCheckinInfo(opp.lead);
+
       const waitForClass = Boolean(payload.waitForClass || !payload.classId);
       if (!payload.classId && !waitForClass) {
         throw new BadRequestException(
@@ -1268,5 +1271,48 @@ export class OpportunityService {
         waitForClass,
       };
     });
+  }
+
+  private validateCheckinInfo(lead: any) {
+    const missingFields: string[] = [];
+
+    if (!lead.parent?.fullName?.trim())
+      missingFields.push('Họ tên phụ huynh/người liên hệ');
+    if (!lead.parent?.phone?.trim())
+      missingFields.push('Số điện thoại phụ huynh/người liên hệ');
+    if (
+      lead.parent?.phone?.trim() &&
+      !/^0\d{9,10}$/.test(PhoneUtility.normalize(lead.parent.phone))
+    ) {
+      missingFields.push('Số điện thoại phụ huynh không hợp lệ');
+    }
+    if (!lead.prospectiveStudentName?.trim())
+      missingFields.push('Họ tên học sinh');
+    if (!lead.centerId) missingFields.push('Trung tâm');
+
+    if (lead.fatherName?.trim() && !lead.fatherPhone?.trim()) {
+      missingFields.push('Số điện thoại của bố');
+    }
+    if (
+      lead.fatherPhone?.trim() &&
+      !/^0\d{9,10}$/.test(PhoneUtility.normalize(lead.fatherPhone))
+    ) {
+      missingFields.push('Số điện thoại của bố không hợp lệ');
+    }
+    if (lead.motherName?.trim() && !lead.motherPhone?.trim()) {
+      missingFields.push('Số điện thoại của mẹ');
+    }
+    if (
+      lead.motherPhone?.trim() &&
+      !/^0\d{9,10}$/.test(PhoneUtility.normalize(lead.motherPhone))
+    ) {
+      missingFields.push('Số điện thoại của mẹ không hợp lệ');
+    }
+
+    if (missingFields.length > 0) {
+      throw new BadRequestException(
+        `Vui lòng hoàn thiện thông tin check-in trước khi chuyển bước: ${missingFields.join(', ')}`,
+      );
+    }
   }
 }
