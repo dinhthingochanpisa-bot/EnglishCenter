@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { apiFetch } from '@/lib/api';
 import { useAppDialog } from '@/providers/AppDialogProvider';
+import { useAuth } from '@/providers/AuthProvider';
 import {
   leadPipelineStages,
   leadStatusLabels,
@@ -181,6 +182,7 @@ type SalesHandover = {
 };
 
 type WonForm = {
+  centerId: string;
   classId: string;
   amount: string;
   productName: string;
@@ -215,6 +217,7 @@ const emptySalesHandover: SalesHandover = {
 
 export default function LeadDetailClient({ id }: { id: string }) {
   const router = useRouter();
+  const { user } = useAuth();
   const { confirm } = useAppDialog();
   const [lead, setLead] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -231,6 +234,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
   const [showWonForm, setShowWonForm] = useState(false);
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [issues, setIssues] = useState<any[]>([]);
+  const [availableCenters, setAvailableCenters] = useState<Array<{ id: string; name: string; code: string }>>([]);
   const [crmConfig, setCrmConfig] = useState<any>(null);
   const [wonQuote, setWonQuote] = useState<any>(null);
   const [wonQuoteError, setWonQuoteError] = useState<string | null>(null);
@@ -256,6 +260,7 @@ export default function LeadDetailClient({ id }: { id: string }) {
   });
   const [trialClassId, setTrialClassId] = useState('');
   const [wonForm, setWonForm] = useState<WonForm>({
+    centerId: '',
     classId: '',
     amount: '',
     productName: '',
@@ -301,22 +306,13 @@ export default function LeadDetailClient({ id }: { id: string }) {
       setLead(data);
       apiFetch(`/leads/${id}/issues`).then(setIssues).catch(() => setIssues([]));
       const wonOpportunity = data.opportunities?.find((item: any) => item.status === 'WON') || data.opportunities?.[0];
-      const classOpportunity = data.opportunities?.[0];
       if (wonOpportunity?.status === 'WON') {
         const handover = await apiFetch(`/opportunities/${wonOpportunity.id}/handover`);
         setSalesHandover({ ...emptySalesHandover, ...(handover || {}) });
       } else {
         setSalesHandover(null);
       }
-      if (classOpportunity?.id) {
-        apiFetch<Array<{ id: string; name: string; code: string; centerId: string; center?: { code?: string; name?: string }; program?: { name?: string } }>>(
-          `/opportunities/${classOpportunity.id}/classes`,
-        )
-          .then(setClasses)
-          .catch(() => setClasses([]));
-      } else {
-        setClasses([]);
-      }
+      setWonForm((prev) => ({ ...prev, centerId: data.centerId || '' }));
     } catch (err: any) {
       setError(err.message || 'Không thể tải Lead');
     } finally {
@@ -324,8 +320,20 @@ export default function LeadDetailClient({ id }: { id: string }) {
     }
   };
 
+  const fetchAvailableCenters = async () => {
+    try {
+      const data = await apiFetch<any[]>('/admin/centers');
+      setAvailableCenters(data);
+    } catch {
+      if (user?.centers) {
+        setAvailableCenters(user.centers.map((c: any) => ({ id: c.id, name: c.name, code: c.code })));
+      }
+    }
+  };
+
   useEffect(() => {
     fetchLead();
+    fetchAvailableCenters();
     apiFetch<LeadAssignee[]>('/leads/assignees')
       .then(setAssignees)
       .catch(() => setAssignees([]));
@@ -333,6 +341,27 @@ export default function LeadDetailClient({ id }: { id: string }) {
       .then(setCrmConfig)
       .catch(() => setCrmConfig(null));
   }, [id]);
+
+  useEffect(() => {
+    const classOpportunityId =
+      lead?.opportunities?.find((item: any) => item.status !== 'LOST')?.id ||
+      lead?.opportunities?.[0]?.id;
+
+    if (wonForm.centerId && classOpportunityId) {
+      apiFetch<any[]>(
+        `/opportunities/${classOpportunityId}/classes?centerId=${wonForm.centerId}`,
+      )
+        .then((data) => {
+          setClasses(data);
+          // Reset classId if not in new center
+          setWonForm((prev) => {
+            const exists = data.some((c: any) => c.id === prev.classId);
+            return exists ? prev : { ...prev, classId: '' };
+          });
+        })
+        .catch(() => setClasses([]));
+    }
+  }, [wonForm.centerId, lead?.opportunities]);
 
   useEffect(() => {
     if (!lead) return;
@@ -626,15 +655,16 @@ export default function LeadDetailClient({ id }: { id: string }) {
 
   const handleMarkWon = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!primaryOpportunity) return;
-
     setIsSaving(true);
     setError(null);
     try {
-      await apiFetch(`/opportunities/${primaryOpportunity.id}/won`, {
+      const activeOpportunity = lead.opportunities?.find((item: any) => item.status !== 'LOST');
+      if (!activeOpportunity) throw new Error('Không tìm thấy cơ hội hoạt động.');
+
+      await apiFetch(`/opportunities/${activeOpportunity.id}/won`, {
         method: 'POST',
         body: JSON.stringify({
-          classId: wonForm.classId,
+          ...wonForm,
           waitForClass: !wonForm.classId,
           amount: Number(wonForm.amount || 0),
           pricingMode: 'CONFIG',
@@ -1302,10 +1332,18 @@ export default function LeadDetailClient({ id }: { id: string }) {
                 <form onSubmit={handleMarkWon} className="mt-6 space-y-4 border-t border-indigo-100 pt-5">
                   <h4 className="text-sm font-semibold text-slate-700">Chốt thành công</h4>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <ConfigSelect
+                      label="Trung tâm chính thức"
+                      value={wonForm.centerId}
+                      options={availableCenters.map((c) => `${c.id}|${c.name} (${c.code})`)}
+                      onChange={(val) => setWonForm((prev) => ({ ...prev, centerId: val.split('|')[0] }))}
+                      valueResolver={(opt) => opt.split('|')[0]}
+                      labelResolver={(opt) => opt.split('|')[1]}
+                    />
                     <ClassSelect
                       label="Lớp chính thức"
                       value={wonForm.classId}
-                      classes={classesForLead}
+                      classes={classes}
                       onChange={(value) => setWonForm((form) => ({ ...form, classId: value }))}
                       emptyLabel="Pending - Chờ xếp lớp"
                     />
@@ -2018,7 +2056,15 @@ function ClassSelect({
 }: {
   label: string;
   value: string;
-  classes: Array<{ id: string; name: string; code: string; center?: { code?: string; name?: string }; program?: { name?: string } }>;
+  classes: Array<{
+    id: string;
+    name: string;
+    code: string;
+    center?: { code?: string; name?: string };
+    program?: { name?: string };
+    capacity?: number;
+    _count?: { students: number };
+  }>;
   onChange: (value: string) => void;
   required?: boolean;
   emptyLabel?: string;
@@ -2033,11 +2079,18 @@ function ClassSelect({
         required={required}
       >
         <option value="">{emptyLabel}</option>
-        {classes.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.center?.code ? `${item.center.code} - ` : ''}{item.code} - {item.name}{item.program?.name ? ` (${item.program.name})` : ''}
-          </option>
-        ))}
+        {classes.map((item) => {
+          const current = item._count?.students ?? 0;
+          const cap = item.capacity ?? 0;
+          const isFull = cap > 0 && current >= cap;
+
+          return (
+            <option key={item.id} value={item.id} disabled={isFull}>
+              {item.name} ({item.code}) • {item.program?.name || 'No Program'} [{current}/{cap}]
+              {isFull ? ' - ĐÃ ĐỦ SĨ SỐ' : ''}
+            </option>
+          );
+        })}
       </select>
     </div>
   );

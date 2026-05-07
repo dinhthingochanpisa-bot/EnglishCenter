@@ -38,7 +38,7 @@ export class OpportunityService {
     });
   }
 
-  async findClassesForOpportunity(id: string, user: any) {
+  async findClassesForOpportunity(id: string, user: any, centerId?: string) {
     const opp = await this.prisma.opportunity.findUnique({
       where: { id },
       include: { lead: true },
@@ -46,16 +46,13 @@ export class OpportunityService {
 
     if (!opp) throw new NotFoundException('Opportunity not found');
     CenterScope.validate(user, opp.lead.centerId);
-
-    const classWhere =
-      user.role === 'SUPER_ADMIN'
-        ? {}
-        : { centerId: { in: user.allowedCenterIds || [] } };
+    const targetCenterId = centerId || opp.lead.centerId;
+    CenterScope.validate(user, targetCenterId);
 
     return this.prisma.class.findMany({
       where: {
-        ...classWhere,
-        status: 'ACTIVE',
+        centerId: targetCenterId,
+        status: { in: ['ACTIVE', 'PLANNING'] },
       },
       include: {
         program: true,
@@ -63,7 +60,7 @@ export class OpportunityService {
         teacher: { select: { id: true, fullName: true } },
         _count: { select: { students: true } },
       },
-      orderBy: [{ center: { code: 'asc' } }, { code: 'asc' }],
+      orderBy: [{ code: 'asc' }],
     });
   }
 
@@ -129,7 +126,9 @@ export class OpportunityService {
       CenterScope.validate(user, opp.lead.centerId);
 
       if (opp.status !== OpportunityStatus.WON) {
-        throw new BadRequestException('Chỉ cập nhật bàn giao sau khi cơ hội đã chốt thành công');
+        throw new BadRequestException(
+          'Chỉ cập nhật bàn giao sau khi cơ hội đã chốt thành công',
+        );
       }
 
       const existing = await tx.salesHandover.findUnique({
@@ -219,15 +218,15 @@ export class OpportunityService {
   private isSalesHandoverCompleted(handover: any) {
     return Boolean(
       handover.profileConfirmed &&
-        handover.paymentGuideSent &&
-        handover.paymentReceiptConfirmed &&
-        handover.scheduleRequested &&
-        handover.scheduleConfirmed &&
-        handover.academicHandoverSent &&
-        handover.welcomeSent &&
-        handover.groupsAdded &&
-        handover.zaloGroupCreated &&
-        handover.parentConfirmed,
+      handover.paymentGuideSent &&
+      handover.paymentReceiptConfirmed &&
+      handover.scheduleRequested &&
+      handover.scheduleConfirmed &&
+      handover.academicHandoverSent &&
+      handover.welcomeSent &&
+      handover.groupsAdded &&
+      handover.zaloGroupCreated &&
+      handover.parentConfirmed,
     );
   }
 
@@ -240,7 +239,9 @@ export class OpportunityService {
 
     CenterScope.validate(user, opp.lead.centerId);
     if (status === OpportunityStatus.WON) {
-      throw new BadRequestException('Vui lòng dùng luồng chốt thành công để chọn lớp và tạo hợp đồng');
+      throw new BadRequestException(
+        'Vui lòng dùng luồng chốt thành công để chọn lớp và tạo hợp đồng',
+      );
     }
 
     const updated = await this.prisma.opportunity.update({
@@ -273,7 +274,9 @@ export class OpportunityService {
       CenterScope.validate(user, opp.lead.centerId);
 
       if (opp.status !== OpportunityStatus.TEST_DONE) {
-        throw new BadRequestException('Chỉ nhập kết quả khi cơ hội ở trạng thái Đã kiểm tra');
+        throw new BadRequestException(
+          'Chỉ nhập kết quả khi cơ hội ở trạng thái Đã kiểm tra',
+        );
       }
 
       const result = payload.result?.toString().trim();
@@ -307,7 +310,11 @@ export class OpportunityService {
         where: { id },
         data: {
           status: OpportunityStatus.TRIAL_DONE,
-          notes: [opp.notes, `Kết quả kiểm tra: ${result}`, notes ? `Nhận xét: ${notes}` : null]
+          notes: [
+            opp.notes,
+            `Kết quả kiểm tra: ${result}`,
+            notes ? `Nhận xét: ${notes}` : null,
+          ]
             .filter(Boolean)
             .join('\n'),
         },
@@ -332,7 +339,10 @@ export class OpportunityService {
           testDate: testEvent.scheduledAt,
           resultReturned: true,
           resultReturnedAt: new Date(),
-          scoreOverall: placementScore == null ? undefined : new Prisma.Decimal(placementScore),
+          scoreOverall:
+            placementScore == null
+              ? undefined
+              : new Prisma.Decimal(placementScore),
         },
       });
 
@@ -355,12 +365,25 @@ export class OpportunityService {
       CenterScope.validate(user, opp.lead.centerId);
 
       if (opp.status !== OpportunityStatus.TRIAL_DONE) {
-        throw new BadRequestException('Chỉ xếp lớp học thử khi cơ hội ở trạng thái Đã học thử');
+        throw new BadRequestException(
+          'Chỉ xếp lớp học thử khi cơ hội ở trạng thái Đã học thử',
+        );
       }
 
-      const student = await this.ensureStudentFromOpportunity(tx, opp, payload.student || {}, StudentStatus.TRIAL);
+      const student = await this.ensureStudentFromOpportunity(
+        tx,
+        opp,
+        payload.student || {},
+        StudentStatus.TRIAL,
+      );
       await this.syncLatestPlacementResult(tx, opp.leadId, student.id);
-      await this.assignStudentToClass(tx, student.id, payload.classId, opp.lead.centerId, 'ENROLLED');
+      await this.assignStudentToClass(
+        tx,
+        student.id,
+        payload.classId,
+        opp.lead.centerId,
+        'ENROLLED',
+      );
 
       await tx.auditLog.create({
         data: {
@@ -394,12 +417,15 @@ export class OpportunityService {
       CenterScope.validate(user, opp.lead.centerId);
 
       if (opp.status !== OpportunityStatus.CHECKIN_DONE) {
-        throw new BadRequestException('Chỉ nhập hồ sơ học sinh sau khi cơ hội ở trạng thái Đã check-in');
+        throw new BadRequestException(
+          'Chỉ nhập hồ sơ học sinh sau khi cơ hội ở trạng thái Đã check-in',
+        );
       }
 
       const parentPayload = payload.parent || {};
       const studentPayload = payload.student || {};
-      const parentName = parentPayload.fullName?.trim() || opp.lead.parent.fullName;
+      const parentName =
+        parentPayload.fullName?.trim() || opp.lead.parent.fullName;
       const parentPhone = parentPayload.phone?.trim() || opp.lead.parent.phone;
       const studentName =
         studentPayload.fullName?.trim() ||
@@ -407,7 +433,9 @@ export class OpportunityService {
         parentName;
 
       if (!parentName || !parentPhone || !studentName) {
-        throw new BadRequestException('Vui lòng nhập đầy đủ tên phụ huynh, số điện thoại và tên học sinh');
+        throw new BadRequestException(
+          'Vui lòng nhập đầy đủ tên phụ huynh, số điện thoại và tên học sinh',
+        );
       }
 
       let parentId = opp.lead.parentId;
@@ -477,21 +505,43 @@ export class OpportunityService {
 
       const studentData = {
         fullName: studentName,
-        birthday: studentPayload.birthday ? new Date(studentPayload.birthday) : null,
+        birthday: studentPayload.birthday
+          ? new Date(studentPayload.birthday)
+          : null,
         gender: studentPayload.gender || 'OTHER',
         centerId: opp.lead.centerId,
         target: studentPayload.target?.trim() || opp.lead.target || null,
-        studentPhone: studentPayload.studentPhone?.trim() || opp.lead.studentPhone || null,
+        studentPhone:
+          studentPayload.studentPhone?.trim() || opp.lead.studentPhone || null,
         school: studentPayload.school?.trim() || opp.lead.school || null,
-        currentGrade: studentPayload.currentGrade?.trim() || studentPayload.grade?.trim() || opp.lead.grade || null,
-        address: studentPayload.address?.trim() || opp.lead.address || parent.address || null,
-        fatherName: studentPayload.fatherName?.trim() || opp.lead.fatherName || null,
-        fatherPhone: studentPayload.fatherPhone?.trim() || opp.lead.fatherPhone || null,
-        motherName: studentPayload.motherName?.trim() || opp.lead.motherName || null,
-        motherPhone: studentPayload.motherPhone?.trim() || opp.lead.motherPhone || null,
-        aim: studentPayload.aim?.trim() || opp.lead.aim || opp.lead.target || null,
-        expectedExamTime: studentPayload.expectedExamTime?.trim() || opp.lead.expectedExamTime || null,
-        productName: studentPayload.productName?.trim() || opp.lead.productInterest || null,
+        currentGrade:
+          studentPayload.currentGrade?.trim() ||
+          studentPayload.grade?.trim() ||
+          opp.lead.grade ||
+          null,
+        address:
+          studentPayload.address?.trim() ||
+          opp.lead.address ||
+          parent.address ||
+          null,
+        fatherName:
+          studentPayload.fatherName?.trim() || opp.lead.fatherName || null,
+        fatherPhone:
+          studentPayload.fatherPhone?.trim() || opp.lead.fatherPhone || null,
+        motherName:
+          studentPayload.motherName?.trim() || opp.lead.motherName || null,
+        motherPhone:
+          studentPayload.motherPhone?.trim() || opp.lead.motherPhone || null,
+        aim:
+          studentPayload.aim?.trim() || opp.lead.aim || opp.lead.target || null,
+        expectedExamTime:
+          studentPayload.expectedExamTime?.trim() ||
+          opp.lead.expectedExamTime ||
+          null,
+        productName:
+          studentPayload.productName?.trim() ||
+          opp.lead.productInterest ||
+          null,
         placementTestDate: opp.lead.testDate || null,
         placementListening: opp.lead.scoreListening || null,
         placementReading: opp.lead.scoreReading || null,
@@ -519,7 +569,9 @@ export class OpportunityService {
         tx,
         student.id,
         parentId,
-        parentPayload.relationship || existingRelation?.relationship || 'Ph\u1ee5 huynh',
+        parentPayload.relationship ||
+          existingRelation?.relationship ||
+          'Ph\u1ee5 huynh',
         familyId,
         { isPrimaryContact: true, isPrimaryPayer: true },
       );
@@ -610,21 +662,48 @@ export class OpportunityService {
 
     const studentData = {
       fullName: studentName,
-      birthday: studentPayload.birthday ? new Date(studentPayload.birthday) : undefined,
+      birthday: studentPayload.birthday
+        ? new Date(studentPayload.birthday)
+        : undefined,
       gender: studentPayload.gender || undefined,
       centerId: studentPayload.centerId || opp.lead.centerId,
       target: studentPayload.target?.trim() || opp.lead.target || undefined,
-      studentPhone: studentPayload.studentPhone?.trim() || opp.lead.studentPhone || undefined,
+      studentPhone:
+        studentPayload.studentPhone?.trim() ||
+        opp.lead.studentPhone ||
+        undefined,
       school: studentPayload.school?.trim() || opp.lead.school || undefined,
-      currentGrade: studentPayload.currentGrade?.trim() || studentPayload.grade?.trim() || opp.lead.grade || undefined,
-      address: studentPayload.address?.trim() || opp.lead.address || opp.lead.parent?.address || undefined,
-      fatherName: studentPayload.fatherName?.trim() || opp.lead.fatherName || undefined,
-      fatherPhone: studentPayload.fatherPhone?.trim() || opp.lead.fatherPhone || undefined,
-      motherName: studentPayload.motherName?.trim() || opp.lead.motherName || undefined,
-      motherPhone: studentPayload.motherPhone?.trim() || opp.lead.motherPhone || undefined,
-      aim: studentPayload.aim?.trim() || opp.lead.aim || opp.lead.target || undefined,
-      expectedExamTime: studentPayload.expectedExamTime?.trim() || opp.lead.expectedExamTime || undefined,
-      productName: studentPayload.productName?.trim() || opp.lead.productInterest || undefined,
+      currentGrade:
+        studentPayload.currentGrade?.trim() ||
+        studentPayload.grade?.trim() ||
+        opp.lead.grade ||
+        undefined,
+      address:
+        studentPayload.address?.trim() ||
+        opp.lead.address ||
+        opp.lead.parent?.address ||
+        undefined,
+      fatherName:
+        studentPayload.fatherName?.trim() || opp.lead.fatherName || undefined,
+      fatherPhone:
+        studentPayload.fatherPhone?.trim() || opp.lead.fatherPhone || undefined,
+      motherName:
+        studentPayload.motherName?.trim() || opp.lead.motherName || undefined,
+      motherPhone:
+        studentPayload.motherPhone?.trim() || opp.lead.motherPhone || undefined,
+      aim:
+        studentPayload.aim?.trim() ||
+        opp.lead.aim ||
+        opp.lead.target ||
+        undefined,
+      expectedExamTime:
+        studentPayload.expectedExamTime?.trim() ||
+        opp.lead.expectedExamTime ||
+        undefined,
+      productName:
+        studentPayload.productName?.trim() ||
+        opp.lead.productInterest ||
+        undefined,
       productRank: studentPayload.productRank?.trim() || undefined,
       feePackage: studentPayload.feePackage?.trim() || undefined,
       placementTestDate: opp.lead.testDate || undefined,
@@ -643,10 +722,17 @@ export class OpportunityService {
         where: { id: existingRelation.studentId },
         data: studentData,
       });
-      await this.upsertSingleParentRelation(tx, student.id, parentId, existingRelation.relationship || 'Ph\u1ee5 huynh', familyId, {
-        isPrimaryContact: true,
-        isPrimaryPayer: true,
-      });
+      await this.upsertSingleParentRelation(
+        tx,
+        student.id,
+        parentId,
+        existingRelation.relationship || 'Ph\u1ee5 huynh',
+        familyId,
+        {
+          isPrimaryContact: true,
+          isPrimaryPayer: true,
+        },
+      );
       await this.upsertLeadFamilyRelations(tx, student.id, opp.lead, familyId);
       return student;
     }
@@ -657,10 +743,17 @@ export class OpportunityService {
         code: `HV${Date.now().toString().slice(-6)}`,
       },
     });
-    await this.upsertSingleParentRelation(tx, student.id, parentId, 'Ph\u1ee5 huynh', familyId, {
-      isPrimaryContact: true,
-      isPrimaryPayer: true,
-    });
+    await this.upsertSingleParentRelation(
+      tx,
+      student.id,
+      parentId,
+      'Ph\u1ee5 huynh',
+      familyId,
+      {
+        isPrimaryContact: true,
+        isPrimaryPayer: true,
+      },
+    );
     await this.upsertLeadFamilyRelations(tx, student.id, opp.lead, familyId);
     return student;
   }
@@ -728,9 +821,12 @@ export class OpportunityService {
     const relations = await tx.parentStudentRelation.findMany({
       where: { studentId },
     });
-    const relationWithSameParent = relations.find((item: any) => item.parentId === parentId);
+    const relationWithSameParent = relations.find(
+      (item: any) => item.parentId === parentId,
+    );
     const relationWithSameRole = relations.find(
-      (item: any) => this.normalizeParentRelationship(item.relationship) === relationship,
+      (item: any) =>
+        this.normalizeParentRelationship(item.relationship) === relationship,
     );
     const targetRelation = relationWithSameParent || relationWithSameRole;
 
@@ -756,7 +852,10 @@ export class OpportunityService {
 
     const duplicateIds = relations
       .filter((item: any) => item.id !== savedRelation.id)
-      .filter((item: any) => this.normalizeParentRelationship(item.relationship) === relationship)
+      .filter(
+        (item: any) =>
+          this.normalizeParentRelationship(item.relationship) === relationship,
+      )
       .map((item: any) => item.id);
 
     if (duplicateIds.length) {
@@ -800,17 +899,29 @@ export class OpportunityService {
     return Number.isFinite(score) ? score : null;
   }
 
-  private async syncLatestPlacementResult(tx: any, leadId: string, studentId: string) {
+  private async syncLatestPlacementResult(
+    tx: any,
+    leadId: string,
+    studentId: string,
+  ) {
     const latestTestEvent = await tx.testEvent.findFirst({
       where: { leadId, status: 'COMPLETED', result: { not: null } },
       orderBy: { scheduledAt: 'desc' },
     });
 
     if (!latestTestEvent) return null;
-    return this.syncPlacementResultFromTestEvent(tx, studentId, latestTestEvent);
+    return this.syncPlacementResultFromTestEvent(
+      tx,
+      studentId,
+      latestTestEvent,
+    );
   }
 
-  private async syncPlacementResultFromTestEvent(tx: any, studentId: string, testEvent: any) {
+  private async syncPlacementResultFromTestEvent(
+    tx: any,
+    studentId: string,
+    testEvent: any,
+  ) {
     const score = this.parsePlacementScore(testEvent.result);
     if (score == null) return null;
 
@@ -865,7 +976,9 @@ export class OpportunityService {
     });
     if (!cls) throw new NotFoundException('Class not found');
     if (cls.centerId !== centerId) {
-      throw new BadRequestException('Lớp và học sinh phải thuộc cùng trung tâm');
+      throw new BadRequestException(
+        'Lớp và học sinh phải thuộc cùng trung tâm',
+      );
     }
     if (cls._count.students >= cls.capacity) {
       throw new BadRequestException('Lớp đã đủ sĩ số');
@@ -920,14 +1033,22 @@ export class OpportunityService {
         throw new ConflictException('Opportunity already WON');
 
       CenterScope.validate(user, opp.lead.centerId);
+      const targetCenterId = payload.centerId || opp.lead.centerId;
+      CenterScope.validate(user, targetCenterId);
+
       const waitForClass = Boolean(payload.waitForClass || !payload.classId);
       if (!payload.classId && !waitForClass) {
-        throw new BadRequestException('Vui lòng chọn lớp trước khi chốt thành công');
+        throw new BadRequestException(
+          'Vui lòng chọn lớp trước khi chốt thành công',
+        );
       }
 
       const configListPrice =
-        Number(payload.unitPrice || 0) * Number(payload.contractedSessions || 0);
-      const listPrice = Number(payload.amount ?? (configListPrice || opp.value || 0));
+        Number(payload.unitPrice || 0) *
+        Number(payload.contractedSessions || 0);
+      const listPrice = Number(
+        payload.amount ?? (configListPrice || opp.value || 0),
+      );
       if (!Number.isFinite(listPrice) || listPrice < 0) {
         throw new BadRequestException('Giá trị hợp đồng không hợp lệ');
       }
@@ -936,7 +1057,9 @@ export class OpportunityService {
         payload.pricingMode === 'CONFIG' ||
         Boolean(payload.discountSegmentCode) ||
         Boolean(payload.promotionCodes?.length) ||
-        Boolean(payload.productName && payload.productRank && payload.feePackage);
+        Boolean(
+          payload.productName && payload.productRank && payload.feePackage,
+        );
 
       const quote = useConfigPricing
         ? await this.contractService.quote({
@@ -958,7 +1081,12 @@ export class OpportunityService {
           };
 
       let planId = payload.planId || null;
-      if (!planId && payload.productName && payload.productRank && payload.feePackage) {
+      if (
+        !planId &&
+        payload.productName &&
+        payload.productRank &&
+        payload.feePackage
+      ) {
         const plan = await tx.plan.findFirst({
           where: {
             name: `${payload.productRank} - ${payload.feePackage}`,
@@ -978,12 +1106,25 @@ export class OpportunityService {
             include: { _count: { select: { students: true } } },
           })
         : null;
-      if (payload.classId && !selectedClass) throw new NotFoundException('Class not found');
-      if (selectedClass && selectedClass._count.students >= selectedClass.capacity) {
+      if (payload.classId && !selectedClass)
+        throw new NotFoundException('Class not found');
+      if (selectedClass && selectedClass.centerId !== targetCenterId) {
+        throw new BadRequestException(
+          'Lớp chính thức không thuộc trung tâm đã chọn',
+        );
+      }
+      if (
+        selectedClass &&
+        !['ACTIVE', 'PLANNING'].includes(selectedClass.status)
+      ) {
+        throw new BadRequestException('Lớp đã chọn không còn nhận học sinh');
+      }
+      if (
+        selectedClass &&
+        selectedClass._count.students >= selectedClass.capacity
+      ) {
         throw new BadRequestException('Lớp đã đủ sĩ số');
       }
-
-      const targetCenterId = selectedClass?.centerId || opp.lead.centerId;
 
       const student = await this.ensureStudentFromOpportunity(
         tx,
@@ -1009,7 +1150,10 @@ export class OpportunityService {
           );
 
       // --- 2. Create Contract ---
-      const contractCode = await this.contractService.generateContractCode(targetCenterId, tx);
+      const contractCode = await this.contractService.generateContractCode(
+        targetCenterId,
+        tx,
+      );
       const contract = await tx.contract.create({
         data: {
           code: contractCode,
@@ -1116,7 +1260,13 @@ export class OpportunityService {
         },
       });
 
-      return { opportunity: updatedOpp, student, contract, class: cls, waitForClass };
+      return {
+        opportunity: updatedOpp,
+        student,
+        contract,
+        class: cls,
+        waitForClass,
+      };
     });
   }
 }

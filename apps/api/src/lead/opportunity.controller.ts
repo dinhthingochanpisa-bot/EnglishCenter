@@ -5,6 +5,7 @@ import {
   Patch,
   Param,
   Body,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -30,8 +31,16 @@ export class OpportunityController {
 
   @Get(':id/classes')
   @Permissions('SALES_PIPELINE.VIEW')
-  async findClassesForOpportunity(@Param('id') id: string, @Request() req: any) {
-    return this.opportunityService.findClassesForOpportunity(id, req.user);
+  async findClassesForOpportunity(
+    @Param('id') id: string,
+    @Query('centerId') centerId: string | undefined,
+    @Request() req: any,
+  ) {
+    return this.opportunityService.findClassesForOpportunity(
+      id,
+      req.user,
+      centerId,
+    );
   }
 
   @Get(':id')
