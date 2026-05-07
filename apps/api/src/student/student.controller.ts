@@ -119,6 +119,31 @@ export class StudentController {
     return savedRelation;
   }
 
+  private async generateStudentCode(centerId: string) {
+    const center = await this.prisma.center.findUnique({
+      where: { id: centerId },
+      select: { code: true },
+    });
+    if (!center) throw new BadRequestException('Vui lòng chọn trung tâm');
+
+    const year = new Date().getFullYear().toString().slice(-2);
+    const prefix = `${(center.code || 'HV').replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || 'HV'}${year}`;
+    const latestStudent = await this.prisma.student.findFirst({
+      where: {
+        centerId,
+        code: { startsWith: prefix },
+      },
+      select: { code: true },
+      orderBy: { code: 'desc' },
+    });
+
+    const latestNumber = latestStudent?.code
+      ? Number(latestStudent.code.slice(prefix.length))
+      : 0;
+    const nextNumber = Number.isFinite(latestNumber) ? latestNumber + 1 : 1;
+
+    return `${prefix}${String(nextNumber).padStart(4, '0')}`;
+  }
   @Get()
   @Permissions('STUDENT.VIEW')
   async findAll(@Request() req: any, @Query('centerId') centerId?: string) {
@@ -136,6 +161,13 @@ export class StudentController {
     });
   }
 
+  @Get('generate-code')
+  @Permissions('STUDENT.VIEW')
+  async generateCode(@Request() req: any, @Query('centerId') centerId?: string) {
+    if (!centerId) throw new BadRequestException('Vui lòng chọn trung tâm');
+    CenterScope.validate(req.user, centerId);
+    return { code: await this.generateStudentCode(centerId) };
+  }
   @Get(':id')
   @Permissions('STUDENT.VIEW')
   async findOne(@Param('id') id: string, @Request() req: any) {
@@ -253,19 +285,42 @@ export class StudentController {
   @Permissions('STUDENT.CREATE')
   async create(@Body() body: CreateStudentDto, @Request() req: any) {
     const { user } = req;
-    CenterScope.validate(user, body.centerId);
+    const fullName = String(body.fullName || '').trim();
+    if (!fullName) {
+      throw new BadRequestException('Vui lòng nhập họ và tên học sinh');
+    }
+    if (!body.centerId) {
+      throw new BadRequestException('Vui lòng chọn trung tâm');
+    }
+    if (body.birthday) {
+      const birthday = new Date(body.birthday);
+      if (Number.isNaN(birthday.getTime())) {
+        throw new BadRequestException('Ngày sinh không hợp lệ');
+      }
+    }
 
-    const student = await this.prisma.student.create({
-      data: {
-        fullName: body.fullName,
-        code: body.code,
-        gender: body.gender,
-        birthday: body.birthday ? new Date(body.birthday) : undefined,
-        centerId: body.centerId,
-        target: body.target,
-        status: body.status || 'ACTIVE',
-      },
-    });
+    CenterScope.validate(user, body.centerId);
+    const studentCode = String(body.code || '').trim() || await this.generateStudentCode(body.centerId);
+
+    let student;
+    try {
+      student = await this.prisma.student.create({
+        data: {
+          fullName,
+          code: studentCode,
+          gender: body.gender,
+          birthday: body.birthday ? new Date(body.birthday) : undefined,
+          centerId: body.centerId,
+          target: body.target,
+          status: body.status || 'ACTIVE',
+        },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002' && Array.isArray(error?.meta?.target) && error.meta.target.includes('code')) {
+        throw new BadRequestException('Mã học sinh đã tồn tại');
+      }
+      throw error;
+    }
 
     await this.prisma.auditLog.create({
       data: {

@@ -1,14 +1,20 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+} from 'class-validator';
 import { Gender, StudentStatus } from '@prisma/client';
 
 export class CreateStudentDto {
   @IsString()
-  @IsNotEmpty({ message: 'Tên học sinh không được để trống' })
+  @IsNotEmpty({ message: 'Vui lòng nhập họ và tên học sinh' })
   fullName: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Mã học sinh không được để trống' })
-  code: string;
+  @IsOptional()
+  code?: string;
 
   @IsEnum(Gender)
   @IsOptional()
@@ -19,7 +25,7 @@ export class CreateStudentDto {
   birthday?: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'ID trung tâm không được để trống' })
+  @IsNotEmpty({ message: 'Vui lòng chọn trung tâm' })
   centerId: string;
 
   @IsString()
