@@ -68,10 +68,25 @@ export interface NotificationData {
   items: NotificationItem[];
 }
 
+const withCenterQuery = (path: string, centerId?: string) => {
+  if (!centerId || centerId === 'all') return path;
+  const params = new URLSearchParams({ centerId });
+  return `${path}?${params.toString()}`;
+};
+
 export const reportingApi = {
-  getExecutive: () => apiFetch<ExecutiveDashboardData>('/reporting/executive'),
-  getSales: () => apiFetch<any>('/reporting/sales'),
-  getAcademic: () => apiFetch<any>('/reporting/academic'),
-  getFamilyInsights: () => apiFetch<any>('/reporting/family-insights'),
-  getNotifications: () => apiFetch<NotificationData>('/reporting/notifications'),
+  getExecutive: (centerId?: string) =>
+    apiFetch<ExecutiveDashboardData>(
+      withCenterQuery('/reporting/executive', centerId),
+    ),
+  getSales: (centerId?: string) =>
+    apiFetch<any>(withCenterQuery('/reporting/sales', centerId)),
+  getAcademic: (centerId?: string) =>
+    apiFetch<any>(withCenterQuery('/reporting/academic', centerId)),
+  getFamilyInsights: (centerId?: string) =>
+    apiFetch<any>(withCenterQuery('/reporting/family-insights', centerId)),
+  getNotifications: (centerId?: string) =>
+    apiFetch<NotificationData>(
+      withCenterQuery('/reporting/notifications', centerId),
+    ),
 };

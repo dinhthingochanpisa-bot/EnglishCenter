@@ -223,13 +223,6 @@ export class ReportingService {
       return CenterScope.filter(user, centerIdField, centerId);
     }
 
-    const permissions = user.permissions || [];
-    const canViewSystemReport =
-      user.role === 'SUPER_ADMIN' ||
-      permissions.includes('*') ||
-      permissions.includes('REPORTING.VIEW');
-
-    if (canViewSystemReport) return {};
     return CenterScope.filter(user, centerIdField);
   }
 

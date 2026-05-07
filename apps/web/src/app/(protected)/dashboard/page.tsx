@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/Button';
 import { reportingApi, ExecutiveDashboardData, NotificationItem } from '@/lib/api/reporting';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useCenterScope } from '@/providers/CenterScopeProvider';
 
 const DASHBOARD_REFRESH_INTERVAL_MS = parseRefreshInterval(
   process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS,
@@ -29,6 +30,7 @@ const DASHBOARD_REFRESH_INTERVAL_MS = parseRefreshInterval(
 const STAGE_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
 
 export default function DashboardPage() {
+  const { selectedCenterId } = useCenterScope();
   const [data, setData] = useState<ExecutiveDashboardData | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,8 +43,8 @@ export default function DashboardPage() {
     try {
       setError(null);
       const [dashResult, notifResult] = await Promise.all([
-        reportingApi.getExecutive(),
-        reportingApi.getNotifications(),
+        reportingApi.getExecutive(selectedCenterId),
+        reportingApi.getNotifications(selectedCenterId),
       ]);
       setData(dashResult);
       setNotifications(notifResult.items);
@@ -54,7 +56,7 @@ export default function DashboardPage() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [selectedCenterId]);
 
   useEffect(() => {
     fetchData();
